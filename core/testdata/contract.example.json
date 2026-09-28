@@ -1,0 +1,15 @@
+{
+  "project_name": "STT Platform Modernization",
+  "license_type": "production",
+  "site_id": "SEOUL-MAIN-DC",
+  "allowed_channels": {
+    "online_stt": 16,
+    "offline_stt": 8
+  },
+  "validity": {
+    "not_before": "2026-09-21T00:00:00Z",
+    "not_after": "2027-09-20T23:59:59Z",
+    "grace_period_days": 14
+  },
+  "warning_notice": "This software license is geographically restricted to the designated site. Unauthorized replication or exceeding allowed channels is strictly prohibited."
+}

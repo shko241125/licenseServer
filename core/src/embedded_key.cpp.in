@@ -1,0 +1,21 @@
+// CMake가 STT_LICENSE_PUBLIC_KEY_FILE 로부터 생성한다. 직접 수정하지 말 것.
+// 이 파일이 링크되지 않으면 Manager::Open 이 정의되지 않아 링크 단계에서 실패한다(키 누락 방지).
+#include <algorithm>
+#include <vector>
+
+#include "detail.h"
+
+namespace stt::license {
+
+Error Manager::Open(const std::string& path, std::unique_ptr<Manager>* out) {
+  static const char kPublicKeyB64[] = "@STT_LICENSE_PUBLIC_KEY_B64@";
+  std::vector<uint8_t> key;
+  detail::Config cfg;
+  if (!crypto::Base64Decode(kPublicKeyB64, &key) || key.size() != cfg.public_key.size()) {
+    return Error::Internal;
+  }
+  std::copy(key.begin(), key.end(), cfg.public_key.begin());
+  return OpenWith(path, cfg, out);
+}
+
+}  // namespace stt::license

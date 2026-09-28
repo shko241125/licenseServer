@@ -1,0 +1,12 @@
+doc/
+work_claude/
+work_codex/
+
+
+
+
+
+
+
+build/
+build-*/
