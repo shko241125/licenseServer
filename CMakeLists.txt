@@ -54,6 +54,12 @@ if(STT_LICENSE_PUBLIC_KEY_FILE)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STT_LICENSE_PUBLIC_KEY_FILE}")
 endif()
 
+# ---- 발급기 ----
+add_executable(licensectl tools/licensectl/main.cpp)
+target_include_directories(licensectl PRIVATE core/src)
+target_compile_options(licensectl PRIVATE ${STT_WARN})
+target_link_libraries(licensectl PRIVATE stt_license)
+
 # ---- 테스트 ----
 if(STT_LICENSE_BUILD_TESTS)
   enable_testing()
