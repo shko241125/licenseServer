@@ -8,6 +8,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)  # SDK의 JNI 공유 라이브러리에 
 
 option(STT_LICENSE_BUILD_TESTS "Build unit tests (GoogleTest)" ON)
 option(STT_LICENSE_BUILD_FUZZ "Build libFuzzer targets (clang only)" OFF)
+option(STT_LICENSE_BUILD_HARNESS "Build JNI integration harness" OFF)
 option(STT_LICENSE_WERROR "Treat warnings as errors" ON)
 set(STT_LICENSE_PUBLIC_KEY_FILE "" CACHE FILEPATH
     "public.key from 'licensectl keygen'. Required for stt_license_key (Manager::Open)")
@@ -82,4 +83,23 @@ if(STT_LICENSE_BUILD_FUZZ)
   target_compile_options(fuzz_parse PRIVATE -fsanitize=fuzzer)
   target_link_options(fuzz_parse PRIVATE -fsanitize=fuzzer)
   target_link_libraries(fuzz_parse PRIVATE stt_license)
+endif()
+
+# ---- JNI 통합 하네스 ----
+if(STT_LICENSE_BUILD_HARNESS)
+  if(NOT TARGET stt_license_key)
+    message(FATAL_ERROR "STT_LICENSE_BUILD_HARNESS requires STT_LICENSE_PUBLIC_KEY_FILE")
+  endif()
+  find_package(JNI REQUIRED)
+  add_library(stt_harness_jni SHARED integration/harness/harness_jni.cpp)
+  target_include_directories(stt_harness_jni PRIVATE ${JNI_INCLUDE_DIRS})
+  target_compile_options(stt_harness_jni PRIVATE ${STT_WARN})
+  set_target_properties(stt_harness_jni PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  # 정적 라이브러리(OpenSSL 포함) 심볼을 외부로 export 하지 않는다 → LD_PRELOAD 가로채기 차단 (§4.8)
+  target_link_options(stt_harness_jni PRIVATE
+    -Wl,--exclude-libs,ALL
+    -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/integration/harness/exports.map
+    -Wl,-Bsymbolic
+    -Wl,--no-undefined)
+  target_link_libraries(stt_harness_jni PRIVATE stt_license_key)
 endif()

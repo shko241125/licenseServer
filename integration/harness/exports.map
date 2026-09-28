@@ -1,0 +1,9 @@
+/* JNI 진입점만 외부에 노출한다. 정적 링크된 OpenSSL·코어 심볼은 모두 숨긴다. */
+{
+  global:
+    Java_*;
+    JNI_OnLoad;
+    JNI_OnUnload;
+  local:
+    *;
+};
