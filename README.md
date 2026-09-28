@@ -18,9 +18,10 @@
 ```bash
 cmake -S . -B build -G Ninja && cmake --build build
 ./build/stt_license_tests
-./build/licensectl keygen -out ./keys
-./build/licensectl issue -key keys/private.key -in core/testdata/contract.example.json -out license.lic
-./build/licensectl verify -pub keys/public.key license.lic
+# 산출물은 build/ 아래에 둔다 (git 무시 대상). 운영 키는 발급 전용 호스트에서만 만든다.
+./build/licensectl keygen -out build/dev-keys
+./build/licensectl issue -key build/dev-keys/private.key -in core/testdata/contract.example.json -out build/license.lic
+./build/licensectl verify -pub build/dev-keys/public.key build/license.lic
 ```
 
 SDK에 넣는 빌드는 `-DSTT_LICENSE_PUBLIC_KEY_FILE=<public.key>`를 지정하고 `stt_license_key`를 링크한다. 자세한 내용은 `docs/integration.md`를 본다.
@@ -41,7 +42,9 @@ scripts/check.sh            # 결과물은 ./build-check
 ```bash
 CC=clang CXX=clang++ cmake -S . -B build-fuzz -DSTT_LICENSE_BUILD_TESTS=OFF -DSTT_LICENSE_BUILD_FUZZ=ON \
   -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fsanitize=fuzzer-no-link"
-cmake --build build-fuzz --target fuzz_parse && ./build-fuzz/fuzz_parse -max_total_time=180 core/testdata
+mkdir -p build-fuzz/corpus && cp core/testdata/* build-fuzz/corpus/   # 시드만 복사, testdata는 건드리지 않음
+cmake --build build-fuzz --target fuzz_parse && ./build-fuzz/fuzz_parse -max_total_time=180 build-fuzz/corpus
 ```
+libFuzzer는 새로 찾은 입력을 코퍼스 디렉터리에 계속 저장하므로 `core/testdata`를 코퍼스로 직접 지정하지 않는다.
 
 골든 파일(`core/testdata/golden_*`)은 정규화·출력 규칙이 바뀌지 않았다는 증거다. 이 테스트가 실패하면 이미 배포된 라이선스가 깨질 수 있다는 뜻이므로, 의도한 변경인지 반드시 확인한 뒤에만 `STT_UPDATE_GOLDEN=1`로 다시 생성한다.
