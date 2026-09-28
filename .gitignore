@@ -1,4 +1,4 @@
-doc/
+docs/
 work_claude/
 work_codex/
 
@@ -10,3 +10,8 @@ work_codex/
 
 build/
 build-*/
+
+# 로컬 발급 산출물 — 비밀키·라이선스가 실수로 커밋되지 않게
+private.key
+/keys/
+/*.lic
