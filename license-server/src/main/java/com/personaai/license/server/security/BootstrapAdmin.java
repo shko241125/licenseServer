@@ -43,7 +43,7 @@ public class BootstrapAdmin implements ApplicationRunner {
         }
         String password = Files.readString(file, StandardCharsets.UTF_8).strip();
         String username = props.bootstrap().adminUsername();
-        userService.create(username, AppUser.Role.ADMIN, password);
+        userService.createBootstrap(username, password); // 만료 없음(계획서 §13 T7)
         audit.record("system", "USER_BOOTSTRAP", username, null, Map.of("role", "ADMIN"));
         log.info("bootstrap admin '{}' created; password change is required at first login", username);
     }

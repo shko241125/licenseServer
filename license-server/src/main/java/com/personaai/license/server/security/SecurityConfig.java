@@ -62,7 +62,10 @@ public class SecurityConfig {
                     String name = String.valueOf(req.getParameter("username"));
                     audit.record(name.length() > 64 ? name.substring(0, 64) : name, "LOGIN_FAIL", null,
                             ClientIp.of(req), Map.of("reason", ex.getClass().getSimpleName()));
-                    res.sendRedirect(req.getContextPath() + "/login?error"); // 원인과 무관하게 같은 메시지
+                    // 원인과 무관하게 같은 메시지. 예외: 임시 비밀번호 만료는 비밀번호가 맞은 뒤에만 판정되므로
+                    // 안내해도 계정 존재 여부가 새지 않는다(계획서 §13 T2).
+                    boolean tempExpired = ex instanceof org.springframework.security.authentication.CredentialsExpiredException;
+                    res.sendRedirect(req.getContextPath() + (tempExpired ? "/login?tempExpired" : "/login?error"));
                 }))
             .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout")
                 .deleteCookies("__Host-LSID").invalidateHttpSession(true))
@@ -84,7 +87,7 @@ public class SecurityConfig {
     @Bean
     UserDetailsService userDetailsService(UserRepository users, Clock clock) {
         return username -> users.findByUsername(username)
-                .map(u -> new AppPrincipal(u, u.lockedAt(clock.instant())))
+                .map(u -> new AppPrincipal(u, u.lockedAt(clock.instant()), u.tempPasswordExpiredAt(clock.instant())))
                 .orElseThrow(() -> new UsernameNotFoundException("not found"));
     }
 

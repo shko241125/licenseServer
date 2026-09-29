@@ -64,6 +64,7 @@ license:
   data-key-file: /run/secrets/data_key
   zone: Asia/Seoul
   session-absolute-timeout: 8h
+  temp-password-ttl: ${LICENSE_TEMP_PASSWORD_TTL:72h}   # 관리자가 정한 임시 비밀번호의 유효 시간 (계획서 §13)
   bootstrap:
     admin-username: ${LICENSE_BOOTSTRAP_ADMIN:admin}
     password-file: /run/secrets/initial_admin_password

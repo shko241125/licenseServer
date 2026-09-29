@@ -21,11 +21,13 @@ public class UserRepository {
 
     static AppUser map(ResultSet rs, int i) throws SQLException {
         OffsetDateTime locked = rs.getObject("locked_until", OffsetDateTime.class);
+        OffsetDateTime expires = rs.getObject("password_expires_at", OffsetDateTime.class);
         return new AppUser(rs.getLong("id"), rs.getString("username"), rs.getString("password_hash"),
                 AppUser.Role.valueOf(rs.getString("role")), rs.getString("totp_secret_enc"),
                 rs.getLong("totp_last_step"), rs.getBoolean("enabled"), rs.getBoolean("must_change_password"),
                 rs.getInt("failed_count"), locked == null ? null : locked.toInstant(),
-                rs.getObject("created_at", OffsetDateTime.class).toInstant());
+                rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                expires == null ? null : expires.toInstant());
     }
 
     public Optional<AppUser> findByUsername(String username) {
@@ -55,9 +57,14 @@ public class UserRepository {
                 .params(username, passwordHash, role.name()).query(Long.class).single();
     }
 
-    public void updatePassword(long id, String passwordHash, boolean mustChange) {
-        jdbc.sql("UPDATE app_user SET password_hash = ?, must_change_password = ?, failed_count = 0, locked_until = NULL WHERE id = ?")
-                .params(passwordHash, mustChange, id).update();
+    /** expiresAt: 임시 비밀번호 만료 시각(mustChange=true 일 때만 의미, null 이면 만료 없음). */
+    public void updatePassword(long id, String passwordHash, boolean mustChange, Instant expiresAt) {
+        jdbc.sql("""
+                UPDATE app_user SET password_hash = ?, must_change_password = ?, password_expires_at = ?,
+                  failed_count = 0, locked_until = NULL WHERE id = ?""")
+                .params(passwordHash, mustChange,
+                        mustChange && expiresAt != null ? OffsetDateTime.ofInstant(expiresAt, ZoneOffset.UTC) : null, id)
+                .update();
         jdbc.sql("INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)").params(id, passwordHash).update();
     }
 

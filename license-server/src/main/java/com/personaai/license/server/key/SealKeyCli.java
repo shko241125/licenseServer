@@ -41,7 +41,7 @@ public final class SealKeyCli {
                     : readPassphraseTwice();
             if (pass == null) return 1;
             Licensectl licensectl = new Licensectl(new LicenseProperties(licensectlPath, null, null, null, null,
-                    null, null, null, null));
+                    null, null, null, null, null));
             String publicKey = licensectl.publicKeyOf(line); // 비밀키 형식 검증 겸 공개키 계산
             SealedKeyFile sealed = SealedKeyFile.seal(line, pass, publicKey, SealedKeyFile.DEFAULT_ITERATIONS);
             if (!Arrays.equals(sealed.unseal(pass), line)) throw new IllegalStateException("self-check failed");

@@ -30,12 +30,27 @@ public class UserService {
     private final PasswordEncoder encoder;
     private final Clock clock;
     private final byte[] dataKey;
+    private final Duration tempPasswordTtl;
 
     public UserService(UserRepository users, PasswordEncoder encoder, Clock clock, LicenseProperties props) {
         this.users = users;
         this.encoder = encoder;
         this.clock = clock;
         this.dataKey = loadDataKey(props);
+        this.tempPasswordTtl = props.tempPasswordTtl();
+        if (tempPasswordTtl == null || tempPasswordTtl.isNegative() || tempPasswordTtl.isZero()) {
+            throw new IllegalStateException("license.temp-password-ttl must be positive");
+        }
+    }
+
+    public Duration tempPasswordTtl() {
+        return tempPasswordTtl;
+    }
+
+    /** 초 단위로 자른 만료 시각. PostgreSQL 은 초 이하를 마이크로초로 "반올림"해 저장하므로, 자르지 않으면
+     *  저장값이 계산값보다 늦어져 경계 판정이 흔들린다(구현 중 테스트로 발견). */
+    private java.time.Instant tempPasswordExpiry() {
+        return clock.instant().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).plus(tempPasswordTtl);
     }
 
     /** TOTP 비밀값 암호화 키(32바이트 Base64). 없으면 기동 실패 — TOTP 는 필수 기능(D-S1). */
@@ -56,6 +71,13 @@ public class UserService {
         }
     }
 
+    /** 임시 비밀번호가 만료된 상태에서 변경을 시도함(계획서 §13 T3). */
+    public static class TempPasswordExpiredException extends PolicyException {
+        public TempPasswordExpiredException() {
+            super("임시 비밀번호가 만료되었습니다. 관리자에게 재발급을 요청하세요.");
+        }
+    }
+
     public static void checkPolicy(String username, String password) {
         if (password == null || password.length() < MIN_PASSWORD || password.length() > MAX_PASSWORD) {
             throw new PolicyException("비밀번호는 " + MIN_PASSWORD + "~" + MAX_PASSWORD + "자여야 합니다.");
@@ -68,8 +90,21 @@ public class UserService {
         }
     }
 
+    /** 관리자가 만드는 계정: 임시 비밀번호는 TTL 뒤 만료된다. 반환: 만료 시각. */
     @Transactional
-    public long create(String username, AppUser.Role role, String tempPassword) {
+    public java.time.Instant create(String username, AppUser.Role role, String tempPassword) {
+        java.time.Instant expires = tempPasswordExpiry();
+        createInternal(username, role, tempPassword, expires);
+        return expires;
+    }
+
+    /** 초기 관리자: 만료 없음(계획서 §13 T7 — 설치 직후 전원 잠김 방지). */
+    @Transactional
+    public void createBootstrap(String username, String password) {
+        createInternal(username, AppUser.Role.ADMIN, password, null);
+    }
+
+    private long createInternal(String username, AppUser.Role role, String tempPassword, java.time.Instant expires) {
         if (!username.matches("^[a-z0-9._-]{3,32}$")) {
             throw new PolicyException("사용자명은 소문자·숫자·._- 3~32자여야 합니다.");
         }
@@ -77,26 +112,30 @@ public class UserService {
         checkPolicy(username, tempPassword);
         String hash = encoder.encode(tempPassword);
         long id = users.insert(username, hash, role);
-        users.updatePassword(id, hash, true); // 이력에 남기고 첫 로그인 때 변경 강제
+        users.updatePassword(id, hash, true, expires); // 이력에 남기고 첫 로그인 때 변경 강제
         return id;
     }
 
     @Transactional
     public void changePassword(AppUser user, String current, String next) {
+        if (user.tempPasswordExpiredAt(clock.instant())) throw new TempPasswordExpiredException();
         if (!encoder.matches(current, user.passwordHash())) throw new PolicyException("현재 비밀번호가 올바르지 않습니다.");
         checkPolicy(user.username(), next);
         List<String> recent = users.recentPasswordHashes(user.id(), HISTORY);
         if (recent.stream().anyMatch(h -> encoder.matches(next, h))) {
             throw new PolicyException("최근 " + HISTORY + "개 비밀번호는 다시 쓸 수 없습니다.");
         }
-        users.updatePassword(user.id(), encoder.encode(next), false);
+        users.updatePassword(user.id(), encoder.encode(next), false, null); // 만료 정보도 지워짐
     }
 
+    /** 관리자 초기화: 새 임시 비밀번호와 새 만료 시각. 반환: 만료 시각. */
     @Transactional
-    public void resetPassword(long userId, String tempPassword) {
+    public java.time.Instant resetPassword(long userId, String tempPassword) {
         AppUser u = users.findById(userId).orElseThrow();
         checkPolicy(u.username(), tempPassword);
-        users.updatePassword(userId, encoder.encode(tempPassword), true);
+        java.time.Instant expires = tempPasswordExpiry();
+        users.updatePassword(userId, encoder.encode(tempPassword), true, expires);
+        return expires;
     }
 
     public boolean passwordMatches(AppUser user, String raw) {

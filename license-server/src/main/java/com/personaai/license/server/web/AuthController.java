@@ -88,6 +88,12 @@ public class AuthController {
         }
         try {
             userService.changePassword(users.findById(p.id()).orElseThrow(), current, next);
+        } catch (UserService.TempPasswordExpiredException e) {
+            // 로그인은 만료 전에 했지만 변경 시점에 만료됨 → 세션 종료(계획서 §13 T3)
+            audit.record(p.getUsername(), "PASSWORD_CHANGE_DENIED", p.getUsername(), ClientIp.of(req),
+                    Map.of("reason", "temp password expired"));
+            req.getSession().invalidate();
+            return "redirect:/login?tempExpired";
         } catch (UserService.PolicyException e) {
             model.addAttribute("error", e.getMessage());
             return "account-password";

@@ -15,6 +15,7 @@ public record LicenseProperties(
         Path dataKeyFile,
         ZoneId zone,
         Duration sessionAbsoluteTimeout,
+        Duration tempPasswordTtl,
         Bootstrap bootstrap,
         String defaultWarningNotice) {
 

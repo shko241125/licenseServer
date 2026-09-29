@@ -16,14 +16,21 @@ public final class AppPrincipal implements UserDetails, org.springframework.secu
     private final AppUser.Role role;
     private final boolean enabled;
     private final boolean locked;
+    private final boolean credentialsExpired;
     private String passwordHash;
 
     public AppPrincipal(AppUser u, boolean locked) {
+        this(u, locked, false);
+    }
+
+    /** credentialsExpired: 임시 비밀번호 만료 → 비밀번호 확인 후 CredentialsExpiredException (잠금 카운트 제외). */
+    public AppPrincipal(AppUser u, boolean locked, boolean credentialsExpired) {
         this.id = u.id();
         this.username = u.username();
         this.role = u.role();
         this.enabled = u.enabled();
         this.locked = locked;
+        this.credentialsExpired = credentialsExpired;
         this.passwordHash = u.passwordHash();
     }
 
@@ -57,6 +64,11 @@ public final class AppPrincipal implements UserDetails, org.springframework.secu
     @Override
     public boolean isAccountNonLocked() {
         return !locked;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return !credentialsExpired;
     }
 
     @Override

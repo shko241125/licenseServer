@@ -160,6 +160,64 @@ class WebSecurityIT extends IntegrationTestBase {
         assertThat(users.findByUsername("dis.admin").orElseThrow().enabled()).isTrue();
     }
 
+    // ---- 임시 비밀번호 만료 (계획서 §13) ----
+
+    @Test
+    void tempPasswordExpiresAfterTtlAndResetRestoresAccess() throws Exception {
+        userService.create("temp.exp", AppUser.Role.VIEWER, PW);
+        clock.advance(userService.tempPasswordTtl().minusSeconds(1));               // 만료 1초 전: 사용 가능
+        MvcResult ok = mvc.perform(post("/login").param("username", "temp.exp").param("password", PW).with(csrf()))
+                .andExpect(redirectedUrl("/account/password")).andReturn();
+        ((MockHttpSession) ok.getRequest().getSession()).invalidate();
+        clock.advance(Duration.ofSeconds(1));                                        // 정확히 만료 시각: 만료
+        mvc.perform(post("/login").param("username", "temp.exp").param("password", PW).with(csrf()))
+                .andExpect(redirectedUrl("/login?tempExpired"));                     // T1, T2
+        mvc.perform(post("/login").param("username", "temp.exp").param("password", "wrong-password-xx").with(csrf()))
+                .andExpect(redirectedUrl("/login?error"));                           // 틀린 비밀번호는 일반 메시지(존재 여부 비노출)
+        AppUser u = users.findByUsername("temp.exp").orElseThrow();
+        assertThat(u.failedCount()).isEqualTo(1);                                    // T4: 만료는 실패 횟수에 안 들어감(틀린 1회만)
+        assertThat(u.tempPasswordExpiredAt(clock.instant())).isTrue();
+
+        // T8: 계정 관리 화면 표시
+        MockHttpSession admin = login("temp.admin", PW2, readyUser("temp.admin", AppUser.Role.ADMIN));
+        mvc.perform(get("/users").session(admin))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("임시 비밀번호 만료됨")));
+
+        // T5: 재초기화 → 새 만료 시각으로 다시 사용 가능
+        var expires = userService.resetPassword(u.id(), "Another-Temp-Pass-2026");
+        assertThat(expires).isEqualTo(clock.instant().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+                .plus(userService.tempPasswordTtl()));
+        assertThat(users.findByUsername("temp.exp").orElseThrow().passwordExpiresAt()).isEqualTo(expires); // DB 왕복 후에도 동일
+        mvc.perform(post("/login").param("username", "temp.exp").param("password", "Another-Temp-Pass-2026").with(csrf()))
+                .andExpect(redirectedUrl("/account/password"));
+    }
+
+    @Test
+    void tempPasswordExpiringWhileOnChangePageIsRejected() throws Exception {
+        userService.create("temp.mid", AppUser.Role.VIEWER, PW);
+        MvcResult r = mvc.perform(post("/login").param("username", "temp.mid").param("password", PW).with(csrf()))
+                .andExpect(redirectedUrl("/account/password")).andReturn();
+        MockHttpSession s = (MockHttpSession) r.getRequest().getSession();
+        clock.advance(userService.tempPasswordTtl());                                // 변경 화면에 머무는 사이 만료
+        mvc.perform(post("/account/password").session(s).with(csrf()).param("current", PW)
+                .param("next", PW2).param("confirm", PW2)).andExpect(redirectedUrl("/login?tempExpired")); // T3
+        assertThat(s.isInvalid()).isTrue();
+        AppUser u = users.findByUsername("temp.mid").orElseThrow();
+        assertThat(u.mustChangePassword()).isTrue();                                 // 변경되지 않음
+    }
+
+    @Test
+    void selfChangeClearsExpiryAndBootstrapNeverExpires() throws Exception {
+        readyUser("temp.done", AppUser.Role.VIEWER);                                 // create → 본인 변경
+        AppUser u = users.findByUsername("temp.done").orElseThrow();
+        assertThat(u.passwordExpiresAt()).isNull();                                  // T6
+        assertThat(u.mustChangePassword()).isFalse();
+        AppUser boot = users.findByUsername("root.admin").orElseThrow();
+        assertThat(boot.passwordExpiresAt()).isNull();                               // T7
+        clock.advance(userService.tempPasswordTtl().multipliedBy(10));
+        assertThat(boot.tempPasswordExpiredAt(clock.instant())).isFalse();
+    }
+
     @Test
     void loginRateLimitPerIp() throws Exception {
         for (int i = 0; i < 20; i++) {
