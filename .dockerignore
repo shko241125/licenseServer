@@ -1,0 +1,12 @@
+# 빌드 컨텍스트 = 저장소 루트 (licensectl C++ 소스 + license-server)
+**/build
+**/build-*
+**/.gradle
+.git
+keys
+*.lic
+docs/*.pdf
+work_claude
+work_codex
+license-server/deploy/secrets
+license-server/deploy/data

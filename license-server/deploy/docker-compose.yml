@@ -1,0 +1,69 @@
+# 사내 라이선스 발급 서버. 준비: ./init-secrets.sh → 키 봉인(README) → docker compose up -d
+name: license-server
+
+services:
+  web:
+    image: license-server:${LICENSE_SERVER_TAG:-latest}
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 1g
+    memswap_limit: 1g            # = mem_limit → 스왑 사용 안 함 (키가 디스크로 나가지 않게)
+    ports:
+      - "${LICENSE_BIND_IP:-127.0.0.1}:8443:8443"   # 관리망 IP 로 바꿔서 사용. 0.0.0.0 금지
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/license
+      LICENSE_PUBLIC_KEY_FP: ${LICENSE_PUBLIC_KEY_FP:?set the public key fingerprint printed by seal-key}
+      LICENSE_BOOTSTRAP_ADMIN: ${LICENSE_BOOTSTRAP_ADMIN:-admin}
+      TZ: Asia/Seoul
+    volumes:
+      - ./data/key/sealed-key.json:/data/key/sealed-key.json:ro
+      - ./secrets/tls_keystore.p12:/data/tls/keystore.p12:ro
+    secrets: [db_app_password, db_owner_password, data_key, initial_admin_password, tls_keystore_password]
+    networks: [lic_net, edge]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: license
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_superuser_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    secrets: [db_superuser_password, db_owner_password, db_app_password]
+    networks: [lic_net]       # 포트 게시 없음, 외부 통신 없음
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d license"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  lic_net:
+    internal: true            # DB 는 외부와 통신할 수 없다
+  edge:                       # web 포트 게시용
+    driver_opts:
+      # 외부로 나가는 NAT 를 끈다 → 게시 포트(수신)는 동작하고, 컨테이너발 외부 연결은 응답을 받지 못한다.
+      # 사설 IP 가 그대로 나가므로 엄격한 차단은 호스트 방화벽(DOCKER-USER)으로 추가한다(README).
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+
+volumes:
+  pgdata: {}
+
+secrets:
+  db_superuser_password: { file: ./secrets/db_superuser_password }
+  db_owner_password: { file: ./secrets/db_owner_password }
+  db_app_password: { file: ./secrets/db_app_password }
+  data_key: { file: ./secrets/data_key }
+  initial_admin_password: { file: ./secrets/initial_admin_password }
+  tls_keystore_password: { file: ./secrets/tls_keystore_password }
