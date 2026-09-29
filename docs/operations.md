@@ -9,6 +9,7 @@ licensectl keygen -out /secure/stt-license-keys
 - 오프라인 매체 2부에 백업해 봉인하고, 서로 다른 장소에 보관한다.
 - `public.key`는 SDK 빌드 담당자에게 전달한다(`-DSTT_LICENSE_PUBLIC_KEY_FILE`). 공개키는 비밀이 아니다.
 - 키 파일이 이미 있으면 명령이 실패한다(덮어쓰기 방지).
+- 형식: `public.key`는 Base64 44자 한 줄이고, `private.key`는 `stt-license-ed25519-private-v1:`로 시작한다. 두 파일을 서로 바꿔 지정하면 `licensectl`과 SDK 빌드 모두 거부한다.
 - 키는 **POSIX 권한을 지원하는 리눅스 파일시스템**에 만든다. WSL의 `/mnt/c`, FAT, 일부 네트워크 드라이브에서는 0600이 적용되지 않는다. 이런 곳에 만들면 `licensectl`이 `WARNING: ... readable by other users`를 출력한다.
 
 ## 2. 발급

@@ -6,8 +6,11 @@
 |---|---|
 | `core/` | `stt_license` C++17 정적 라이브러리. 엄격 JSON 파서, RFC 8785 정규화, 서명 검증, 기간 판정, 채널 한도 |
 | `tools/licensectl/` | 사내 발급 CLI (`keygen`, `issue`, `verify`) |
+| `cmake/SttLicenseHardening.cmake` | `stt_license_harden_shared_library()` — JNI `.so`의 심볼 은닉 |
 | `integration/harness/` | SDK 호출 모델을 흉내 낸 JNI 하네스 + Java 결합 테스트 |
-| `docs/integration.md` | SDK·서버 적용 가이드 |
+| `integration/cmake-consumer/` | SDK CMake 빌드를 흉내 낸 소비자 프로젝트(연동 인수 테스트) |
+| `docs/sdk-cmake.md` | **SDK CMake 연동 가이드** (옵션, OpenSSL 선택, 문제 해결) |
+| `docs/integration.md` | SDK·서버 적용 가이드(결합 지점, 서버 체크리스트) |
 | `docs/operations.md` | 키 생성·발급·반입·갱신·장애 대응 절차 |
 | `scripts/check.sh` | 전체 검증 (아래) |
 
@@ -24,7 +27,13 @@ cmake -S . -B build -G Ninja && cmake --build build
 ./build/licensectl verify -pub build/dev-keys/public.key build/license.lic
 ```
 
-SDK에 넣는 빌드는 `-DSTT_LICENSE_PUBLIC_KEY_FILE=<public.key>`를 지정하고 `stt_license_key`를 링크한다. 자세한 내용은 `docs/integration.md`를 본다.
+SDK에 넣을 때는 다음과 같이 쓴다. 자세한 내용은 `docs/sdk-cmake.md`를 본다.
+```cmake
+set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key CACHE FILEPATH "")
+add_subdirectory(third_party/licenseServer EXCLUDE_FROM_ALL)
+target_link_libraries(sonastt_jni_v2 PRIVATE stt_license::embedded)
+stt_license_harden_shared_library(sonastt_jni_v2)
+```
 
 ## 검증
 
@@ -37,6 +46,7 @@ scripts/check.sh            # 결과물은 ./build-check
 4. JNI 하네스를 빌드한다(OpenSSL 정적 링크, `Java_*` 심볼만 export).
 5. Java에서 JNI 결합 테스트를 돌린다.
 6. LD_PRELOAD로 검증 함수를 가로채는 공격을 시도한다. 보호 빌드는 막아야 하고, 대조군은 뚫려야 한다.
+7. SDK를 흉내 낸 CMake 소비자를 빌드한다. 부모 C++14/20, OpenSSL 재사용·사용자 지정 타깃 구성에서 빌드되는지, 키 누락과 비밀키 오지정이 거부되는지 확인한다.
 
 퍼징(clang 필요):
 ```bash

@@ -12,34 +12,24 @@
 
 ### 1.1 빌드에 포함
 
-CMake를 쓰는 경우:
+SDK의 기존 CMake에 서브프로젝트로 추가한다. 옵션, OpenSSL 선택 규칙, 문제 해결은 **`docs/sdk-cmake.md`**에 있다.
 ```cmake
-set(STT_LICENSE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(STT_LICENSE_WERROR OFF CACHE BOOL "" FORCE)          # SDK 컴파일러 경고 정책을 따름
-set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/public.key CACHE FILEPATH "" FORCE)
-add_subdirectory(third_party/licenseServer)             # git submodule 등
-target_link_libraries(sonastt_jni_v2 PRIVATE stt_license_key)
+set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key CACHE FILEPATH "")
+add_subdirectory(third_party/licenseServer EXCLUDE_FROM_ALL)
+target_link_libraries(sonastt_jni_v2 PRIVATE stt_license::embedded)
+stt_license_harden_shared_library(sonastt_jni_v2)
 ```
-- SDK가 이미 정적 링크하는 OpenSSL을 쓰도록 `OPENSSL_ROOT_DIR`, `OPENSSL_USE_STATIC_LIBS=ON`을 SDK와 같게 지정한다. 코어는 OpenSSL 1.1.1과 3.x 모두에 있는 EVP API만 쓴다(1.1.1f, 3.0.2, 3.0.13에서 테스트 통과).
-- CMake가 아니면 `core/src/{json,crypto,license,manager}.cpp`와, `embedded_key.cpp.in`의 `@STT_LICENSE_PUBLIC_KEY_B64@`를 `public.key` 내용으로 치환한 파일을 C++17로 함께 컴파일한다.
-- `stt_license_key`(공개키)를 링크하지 않으면 `Manager::Open`이 정의되지 않아 **링크 에러**가 난다. 키를 빠뜨린 채 배포 빌드가 만들어지는 일을 막기 위한 의도된 동작이다.
-- 빌드는 반드시 운영 이미지와 같은 배포판(Ubuntu 22.04 계열)에서 한다. 더 새 glibc로 빌드한 `.so`는 22.04에서 로드되지 않는다.
+- 코어는 C++17로 빌드되고, 공개 헤더는 C++11 이상이면 포함할 수 있다.
+- libcrypto는 **SDK가 이미 쓰는 OpenSSL을 재사용**해야 한다. 한 `.so`에 두 벌이 들어가면 안 된다(`sdk-cmake.md` §5).
+- 배포 빌드는 Ubuntu 22.04(glibc 2.35)에서 한다.
 
-### 1.2 링크 옵션 — 필수 보안 조치
+### 1.2 심볼 은닉 — 필수 보안 조치
 
-현재 `libsonastt_jni_v2.so`는 정적 링크한 OpenSSL 심볼을 포함해 **24,033개의 심볼을 export**한다(`ED25519_verify`, `EVP_DigestVerify` 등).
-이 상태에서는 `LD_PRELOAD`로 검증 함수를 바꿔치기하면 **변조된 라이선스가 통과한다.** 동일한 구성(정적 링크 + export)으로 실험해 우회가 성공하는 것을 확인했다(`scripts/check.sh` 6단계 대조군).
-
-```
--Wl,--exclude-libs,ALL                 # 정적 라이브러리(OpenSSL 포함) 심볼 비공개
--Wl,--version-script=exports.map       # Java_* 와 JNI_OnLoad 만 공개 (integration/harness/exports.map)
--Wl,-Bsymbolic                          # 내부 호출이 외부 심볼로 가로채이지 않게
-```
-적용 후 확인:
+현재 `libsonastt_jni_v2.so`는 정적 링크한 OpenSSL 심볼을 포함해 **24,033개의 심볼을 export**한다. 이 상태에서는 `LD_PRELOAD`로 `EVP_DigestVerify`를 바꿔치기하면 **변조된 라이선스가 통과한다**(`scripts/check.sh` 6단계에서 실측).
+위의 `stt_license_harden_shared_library()`가 JNI 진입점만 남기고 나머지를 모두 숨긴다. 적용한 뒤에는 다음 명령으로 확인한다.
 ```bash
 nm -D --defined-only libsonastt_jni_v2.so | awk '{print $3}' | grep -v '^Java_'   # 출력이 없어야 함
 ```
-적용 전에 다른 라이브러리가 SDK가 export하는 심볼에 의존하는지 확인한다. 현재 SDK는 `libonnxruntime`을 **사용하는** 쪽이라 영향이 없을 것으로 보이지만, SDK 빌드 담당자가 한 번 더 확인해야 한다.
 
 ### 1.3 기존 라이선스(CFoneLicense) 대체
 
