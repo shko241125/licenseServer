@@ -7,13 +7,17 @@
 //   getSTTSessionInfo → InfoToJson(mgr->Snapshot())
 //
 // 이 헤더의 어떤 함수도 예외를 던지지 않는다(std::bad_alloc 제외). 모든 실패는 Error 값이다.
+// 스레드 안전: Manager 의 모든 멤버 함수와 Channel::Release 는 여러 스레드에서 동시에 호출해도 된다.
+//              단, Manager 소멸은 다른 스레드의 Manager 호출이 모두 끝난 뒤에 해야 한다(Channel 은 예외).
+// 언어 수준: 이 헤더는 C++11 이상에서 포함할 수 있다(라이브러리 구현은 C++17 로 빌드된다).
 #pragma once
 
 #include <cstdint>
 #include <memory>
 #include <string>
 
-namespace stt::license {
+namespace stt {
+namespace license {
 
 enum class Kind { Online = 0, Offline = 1 };  // allowed_channels.online_stt / offline_stt
 
@@ -44,8 +48,8 @@ struct Info {
   std::string license_id, project_name, license_type, site_id;
   int online_max = 0, offline_max = 0;
   int online_used = 0, offline_used = 0;
-  int64_t issued_at = 0, not_before = 0, not_after = 0, grace_until = 0;
-  int64_t checked_at = 0;                 // 이 스냅샷을 만든 시각
+  std::int64_t issued_at = 0, not_before = 0, not_after = 0, grace_until = 0;
+  std::int64_t checked_at = 0;                // 이 스냅샷을 만든 시각
   State state = State::Expired;
   Error last_reload_error = Error::Ok;    // 마지막 파일 재적재 실패 사유 (성공/미변경이면 Ok)
 };
@@ -107,4 +111,5 @@ class Manager {
   std::shared_ptr<detail::Shared> shared_;
 };
 
-}  // namespace stt::license
+}  // namespace license
+}  // namespace stt

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <thread>
@@ -65,6 +66,13 @@ TEST_F(ManagerTest, OpenFailures) {
   ReplaceFile(path_, Issue(old));
   EXPECT_EQ(Open(&m), Error::Expired);
   EXPECT_EQ(m, nullptr);
+
+  // 일반 파일이 아닌 경로: 디렉터리, FIFO(쓰는 쪽이 없으면 예전 구현은 무기한 대기)
+  EXPECT_EQ(Manager::OpenWith(std::filesystem::path(path_).parent_path().string(), Cfg(), &m),
+            Error::FileNotFound);
+  const std::string fifo = dir_.File("license.fifo");
+  ASSERT_EQ(::mkfifo(fifo.c_str(), 0600), 0);
+  EXPECT_EQ(Manager::OpenWith(fifo, Cfg(), &m), Error::FileNotFound);
 
   // 다른 키로 서명된 정상 형식 파일
   ReplaceFile(path_, Issue(Contract{}, TestSeed(50)));
@@ -245,6 +253,15 @@ TEST_F(ManagerTest, LimitReductionDoesNotEvict) {
   EXPECT_EQ(m->Acquire(Kind::Offline, &ch), Error::ChannelLimit);
   held.resize(1);
   EXPECT_EQ(m->Acquire(Kind::Offline, &ch), Error::Ok);
+}
+
+TEST_F(ManagerTest, ReplacedByFifoDoesNotBlock) {
+  auto m = MustOpen();
+  std::filesystem::remove(path_);
+  ASSERT_EQ(::mkfifo(path_.c_str(), 0600), 0);
+  EXPECT_EQ(m->Reload(), Error::FileNotFound);  // 멈추지 않고 즉시 실패
+  Channel ch;
+  EXPECT_EQ(m->Acquire(Kind::Offline, &ch), Error::Ok);  // 기존 라이선스로 계속 서비스
 }
 
 TEST_F(ManagerTest, ClockRollbackTriggersRecheck) {

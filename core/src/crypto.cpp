@@ -1,7 +1,14 @@
 #include "crypto.h"
 
 #include <openssl/evp.h>
+#include <openssl/opensslv.h>
 #include <openssl/rand.h>
+
+// EVP_PKEY_new_raw_public_key / EVP_DigestVerify(one-shot) 는 1.1.1 에서 추가됐다.
+// SDK 가 자체 OpenSSL 타깃(STT_LICENSE_CRYPTO_TARGET)을 넘기면 CMake 가 버전을 확인할 수 없으므로 여기서 막는다.
+#if OPENSSL_VERSION_NUMBER < 0x10101000L
+#error "stt_license requires OpenSSL 1.1.1 or later (libcrypto)"
+#endif
 
 #include <memory>
 

@@ -1,4 +1,8 @@
-#include <fstream>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cerrno>
 #include <mutex>
 
 #include "detail.h"
@@ -25,14 +29,31 @@ using detail::Shared;
 
 int Idx(Kind k) { return k == Kind::Online ? 0 : 1; }
 
+// 일반 파일만 읽는다. FIFO·장치 파일이면 읽기가 무기한 멈출 수 있고(Acquire 가 뮤텍스를 쥔 채로),
+// O_CLOEXEC 가 없으면 읽는 동안 fork 된 자식(JVM 의 ProcessBuilder 등)에 fd 가 샌다.
 Error ReadFile(const std::string& path, std::string* out) {
-  std::ifstream f(path, std::ios::binary);
-  if (!f) return Error::FileNotFound;
+  int fd;
+  do {
+    fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+  } while (fd < 0 && errno == EINTR);
+  if (fd < 0) return Error::FileNotFound;
+  struct Closer { int fd; ~Closer() { ::close(fd); } } closer{fd};
+
+  struct stat st;
+  if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) return Error::FileNotFound;
+  if (st.st_size > static_cast<off_t>(kMaxFileSize)) return Error::FileTooLarge;
+
   std::string buf(kMaxFileSize + 1, '\0');
-  f.read(&buf[0], static_cast<std::streamsize>(buf.size()));
-  if (f.bad()) return Error::FileNotFound;
-  buf.resize(static_cast<size_t>(f.gcount()));
-  if (buf.size() > kMaxFileSize) return Error::FileTooLarge;
+  size_t len = 0;
+  while (len < buf.size()) {  // 크기가 stat 이후 바뀌어도 상한을 지킨다
+    ssize_t n = ::read(fd, &buf[len], buf.size() - len);
+    if (n < 0 && errno == EINTR) continue;
+    if (n < 0) return Error::FileNotFound;
+    if (n == 0) break;
+    len += static_cast<size_t>(n);
+  }
+  if (len > kMaxFileSize) return Error::FileTooLarge;
+  buf.resize(len);
   *out = std::move(buf);
   return Error::Ok;
 }
