@@ -1,0 +1,5 @@
+# Windows 배치 파일은 CRLF 유지 (LF 이면 cmd 의 goto/label 이 오작동할 수 있음)
+*.bat text eol=crlf
+# 셸 스크립트·gradlew 는 LF
+*.sh text eol=lf
+gradlew text eol=lf
