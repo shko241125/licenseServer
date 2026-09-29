@@ -108,14 +108,32 @@ bool Exists(const std::string& path) {
   return ::stat(path.c_str(), &st) == 0;
 }
 
-// Base64 한 줄로 된 키 파일을 읽는다.
-bool ReadKey(const std::string& path, size_t size, std::vector<uint8_t>* out, std::string* err) {
+// 키 파일 형식
+//   public.key : Base64(32바이트) 한 줄 (44자) — SDK 빌드(STT_LICENSE_PUBLIC_KEY_FILE)가 읽는 형식
+//   private.key: "stt-license-ed25519-private-v1:" + Base64(32바이트 seed) 한 줄
+// 비밀키에 접두어를 붙여, 공개키 자리(SDK 빌드·verify -pub)에 잘못 지정하면 형식 단계에서 거부되게 한다.
+// (접두어가 없으면 둘 다 44자 Base64 라서 비밀키가 SDK 바이너리에 내장되어 배포될 수 있다)
+constexpr char kPrivatePrefix[] = "stt-license-ed25519-private-v1:";
+
+bool ReadKey(const std::string& path, bool is_private, std::vector<uint8_t>* out,
+             std::string* err) {
   std::string text;
   if (!ReadAll(path, &text)) {
     *err = path + ": cannot read";
     return false;
   }
   while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+  const bool has_prefix = text.rfind(kPrivatePrefix, 0) == 0;
+  if (is_private && !has_prefix) {
+    *err = path + ": not a licensectl private key (missing \"" + kPrivatePrefix + "\" prefix)";
+    return false;
+  }
+  if (!is_private && has_prefix) {
+    *err = path + ": this is a PRIVATE key; pass public.key instead";
+    return false;
+  }
+  if (is_private) text.erase(0, sizeof(kPrivatePrefix) - 1);
+  const size_t size = is_private ? crypto::kSeedSize : crypto::kPublicKeySize;
   if (!crypto::Base64Decode(text, out) || out->size() != size) {
     *err = path + ": not a Base64 key of " + std::to_string(size) + " bytes";
     return false;
@@ -139,7 +157,7 @@ int Keygen(const std::map<std::string, std::string>& flags) {
     return Fail("key generation failed");
   }
   std::string err;
-  if (!WriteNew(priv_path, crypto::Base64Encode(seed, sizeof seed) + "\n", 0600, &err) ||
+  if (!WriteNew(priv_path, kPrivatePrefix + crypto::Base64Encode(seed, sizeof seed) + "\n", 0600, &err) ||
       !WriteNew(pub_path, crypto::Base64Encode(pub, sizeof pub) + "\n", 0644, &err)) {
     return Fail(err);
   }
@@ -184,7 +202,7 @@ int Issue(const std::map<std::string, std::string>& flags) {
   }
   std::string err, contract;
   std::vector<uint8_t> seed;
-  if (!ReadKey(flags.at("key"), crypto::kSeedSize, &seed, &err)) return Fail(err);
+  if (!ReadKey(flags.at("key"), true, &seed, &err)) return Fail(err);
   if (!ReadAll(flags.at("in"), &contract)) return Fail(flags.at("in") + ": cannot read");
   if (Exists(flags.at("out"))) return Fail(flags.at("out") + ": already exists");
 
@@ -232,7 +250,7 @@ int Verify(const std::map<std::string, std::string>& flags, const std::vector<st
   if (!flags.count("pub") || pos.size() != 1) return Usage();
   std::string err, bytes, detail;
   std::vector<uint8_t> pub;
-  if (!ReadKey(flags.at("pub"), crypto::kPublicKeySize, &pub, &err)) return Fail(err);
+  if (!ReadKey(flags.at("pub"), false, &pub, &err)) return Fail(err);
   if (!ReadAll(pos[0], &bytes)) return Fail(pos[0] + ": cannot read");
   int64_t at = lic::SystemNow();
   auto it = flags.find("at");
