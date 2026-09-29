@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('라이선스 검증')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1>라이선스 검증</h1>
+  <p class="muted">고객에게 받은 license.lic 가 이 서버의 키로 서명됐고 변조되지 않았는지, 지금 유효한지 확인합니다.</p>
+  <form th:action="@{/verify}" method="post" enctype="multipart/form-data">
+    <label>파일 <input type="file" name="file" accept=".lic,.json,.txt"></label>
+    <label>또는 내용 붙여넣기 <textarea name="text" maxlength="65536"></textarea></label>
+    <p><button>검증</button></p>
+  </form>
+  <th:block th:if="${result}">
+    <h2>결과: <span th:class="${result['result'] == 'OK'} ? 's-VALID' : 's-EXPIRED'" th:text="${result['result']}"></span>
+      <span th:if="${result['state']}" th:class="'s-' + ${result['state']}" th:text="' · ' + ${result['state']}"></span></h2>
+    <p class="err" th:if="${result['detail']}" th:text="${result['detail']}"></p>
+    <table th:if="${result['result'] == 'OK'}">
+      <tr th:each="k : ${ {'license_id','project_name','license_type','site_id','online_stt','offline_stt','issued_at','not_before','not_after','grace_until','checked_at'} }">
+        <th th:text="${k}"></th><td th:text="${result[k]}"></td></tr>
+    </table>
+  </th:block>
+</main>
+</body>
+</html>

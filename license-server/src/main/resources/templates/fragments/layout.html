@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:fragment="head(title)">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title} + ' · 라이선스 발급 서버'">라이선스 발급 서버</title>
+  <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header th:fragment="nav" class="topbar">
+  <a class="brand" th:href="@{/}">라이선스 발급 서버</a>
+  <nav>
+    <a th:href="@{/}">대시보드</a>
+    <a th:if="${roles.contains('ROLE_ISSUER')}" th:href="@{/licenses/new}">발급</a>
+    <a th:href="@{/licenses}">이력</a>
+    <a th:href="@{/verify}">검증</a>
+    <a th:href="@{/keys}">키</a>
+    <a th:if="${roles.contains('ROLE_ADMIN')}" th:href="@{/audit}">감사 로그</a>
+    <a th:if="${roles.contains('ROLE_ADMIN')}" th:href="@{/users}">계정</a>
+  </nav>
+  <div class="who">
+    <span th:text="${me.username} + ' (' + ${me.role} + ')'">user</span>
+    <a th:href="@{/account/password}">비밀번호</a>
+    <form th:action="@{/logout}" method="post" class="inline"><button class="link">로그아웃</button></form>
+  </div>
+</header>
+<div th:fragment="flash">
+  <p class="flash info" th:if="${info}" th:text="${info}">info</p>
+  <p class="flash error" th:if="${error}" th:text="${error}">error</p>
+</div>
+<fieldset th:fragment="reauth" class="reauth">
+  <legend>본인 확인</legend>
+  <label>비밀번호 <input type="password" name="password" required autocomplete="current-password"></label>
+  <label>OTP <input name="totp" required inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
+</fieldset>
+</body>
+</html>

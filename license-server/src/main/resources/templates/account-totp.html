@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('OTP 등록')}"></head>
+<body>
+<main class="center">
+  <h1>OTP 등록 (필수)</h1>
+  <p>OTP 앱(Google Authenticator, Microsoft Authenticator 등)에서 <b>키 직접 입력</b>을 선택하고 아래 값을 넣으세요.</p>
+  <p>계정: <span class="mono" th:text="${me.username}"></span><br>키: <b class="mono" th:text="${secret}"></b><br>
+     <span class="muted">종류: 시간 기반, 6자리, 30초</span></p>
+  <details><summary class="muted">otpauth URI</summary><pre th:text="${uri}"></pre></details>
+  <p class="flash error" th:if="${error}" th:text="${error}"></p>
+  <form th:action="@{/account/totp}" method="post">
+    <label>앱에 표시된 6자리 <input name="code" required autofocus inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
+    <p><button>등록</button></p>
+  </form>
+</main>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('서명 키')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1>서명 키</h1>
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <table>
+    <tr><th>상태</th><td><b th:class="'s-' + ${keyState}" th:text="${keyState}"></b>
+      <span class="muted" th:if="${unsealedAt}" th:text="' (해제: ' + ${@fmt.kst(unsealedAt)} + ')'"></span>
+      <div class="err" th:if="${keyError}" th:text="${keyError}"></div>
+      <div class="err" th:if="${lockedUntil}" th:text="'해제 시도 잠금: ' + ${@fmt.kst(lockedUntil)} + ' 까지'"></div></td></tr>
+    <tr><th>공개키</th><td class="mono" th:text="${publicKey} ?: '-'"></td></tr>
+    <tr><th>공개키 지문(SHA-256)</th><td class="mono" th:text="${fingerprint} ?: '-'"></td></tr>
+  </table>
+  <p th:if="${publicKey}"><a class="button secondary" th:href="@{/keys/public.key}">public.key 다운로드 (SDK 빌드용)</a></p>
+  <th:block th:if="${roles.contains('ROLE_ADMIN')}">
+    <th:block th:if="${keyState.name() == 'SEALED'}">
+      <h2>해제 (unseal)</h2>
+      <form th:action="@{/keys/unseal}" method="post">
+        <label>봉인 패스프레이즈 <input type="password" name="passphrase" required autocomplete="off"></label>
+        <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+        <button>해제</button>
+      </form>
+    </th:block>
+    <th:block th:if="${keyState.name() == 'UNSEALED'}">
+      <h2>봉인 (seal)</h2>
+      <p class="muted">발급을 마쳤으면 즉시 봉인하세요. 일정 시간 발급이 없으면 자동으로 봉인됩니다.</p>
+      <form th:action="@{/keys/seal}" method="post"><button class="danger">지금 봉인</button></form>
+    </th:block>
+  </th:block>
+</main>
+</body>
+</html>

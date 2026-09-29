@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('라이선스 발급')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1 th:text="${form.renewedFrom} ? '갱신 발급' : '라이선스 발급'">라이선스 발급</h1>
+  <p class="flash error" th:if="${message}" th:text="${message}"></p>
+  <p class="flash error" th:if="${keyState.name() != 'UNSEALED'}">서명 키가 <b th:text="${keyState}"></b> 상태입니다. 입력·미리보기는 가능하지만 발급하려면 관리자가 키를 해제해야 합니다.</p>
+  <p class="muted" th:if="${form.renewedFrom}">원본 라이선스: <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a></p>
+  <form th:action="@{/licenses/preview}" th:object="${form}" method="post" class="grid">
+    <input type="hidden" th:field="*{submissionToken}">
+    <input type="hidden" th:field="*{renewedFrom}">
+    <label for="projectName">프로젝트명</label>
+    <div><input th:field="*{projectName}" list="projects" maxlength="256" required>
+      <div class="err" th:text="${errors['projectName']}"></div></div>
+    <label for="siteId">사이트 ID</label>
+    <div><input th:field="*{siteId}" list="sites" maxlength="256" required>
+      <div class="err" th:text="${errors['siteId']}"></div></div>
+    <label for="licenseType">유형</label>
+    <div><select th:field="*{licenseType}"><option th:each="t : ${types}" th:value="${t}" th:text="${t}"></option></select>
+      <div class="err" th:text="${errors['licenseType']}"></div></div>
+    <label>채널 수</label>
+    <div class="row">온라인 <input type="number" th:field="*{onlineStt}" min="0" max="100000" class="w-num" required>
+      오프라인 <input type="number" th:field="*{offlineStt}" min="0" max="100000" class="w-num" required>
+      <div class="err full" th:text="${errors['onlineStt']} ?: ${errors['offlineStt']}"></div></div>
+    <label>시작 (KST)</label>
+    <div class="row"><input type="date" th:field="*{notBeforeDate}" required><input type="time" step="1" th:field="*{notBeforeTime}">
+      <span class="err" th:text="${errors['notBefore']}"></span></div>
+    <label>종료 (KST)</label>
+    <div class="row"><input type="date" th:field="*{notAfterDate}" required><input type="time" step="1" th:field="*{notAfterTime}">
+      <span class="err" th:text="${errors['notAfter']}"></span></div>
+    <label for="gracePeriodDays">유예 기간(일)</label>
+    <div><input type="number" th:field="*{gracePeriodDays}" min="0" max="90" class="w-num" required>
+      <div class="err" th:text="${errors['gracePeriodDays']}"></div></div>
+    <label for="warningNotice">경고 문구</label>
+    <div><textarea th:field="*{warningNotice}" maxlength="4096" required></textarea>
+      <div class="err" th:text="${errors['warningNotice']}"></div></div>
+    <div class="full"><button>미리보기</button> <span class="err" th:text="${errors['renewedFrom']}"></span></div>
+  </form>
+  <datalist id="projects"><option th:each="v : ${projects}" th:value="${v}"></option></datalist>
+  <datalist id="sites"><option th:each="v : ${sites}" th:value="${v}"></option></datalist>
+</main>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('발급 이력')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1>발급 이력</h1>
+  <form th:action="@{/licenses}" method="get" class="row">
+    <input name="q" th:value="${q}" placeholder="프로젝트·사이트·라이선스 ID" class="w-md">
+    <select name="status" class="w-sm">
+      <option value="">전체 상태</option>
+      <option th:each="s : ${ {'ISSUED','PENDING','FAILED','VOID'} }" th:value="${s}" th:text="${s}" th:selected="${s == status}"></option>
+    </select>
+    <button>검색</button>
+  </form>
+  <table>
+    <tr><th>생성(KST)</th><th>상태</th><th>유형</th><th>사이트</th><th>프로젝트</th><th>채널(on/off)</th><th>종료(KST)</th><th>발급자</th></tr>
+    <tr th:each="l, it : ${items}" th:if="${it.index < pageSize}">
+      <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${@fmt.kst(l.createdAt())}"></a></td>
+      <td th:class="'s-' + ${l.status()}" th:text="${l.status()}"></td><td th:text="${l.licenseType()}"></td>
+      <td th:text="${l.siteId()}"></td><td th:text="${l.projectName()}"></td>
+      <td th:text="${l.onlineStt()} + ' / ' + ${l.offlineStt()}"></td><td th:text="${@fmt.kst(l.notAfter())}"></td>
+      <td th:text="${l.issuedByName()}"></td></tr>
+  </table>
+  <p class="row">
+    <a th:if="${page > 0}" th:href="@{/licenses(q=${q},status=${status},page=${page - 1})}">← 이전</a>
+    <a th:if="${#lists.size(items) > pageSize}" th:href="@{/licenses(q=${q},status=${status},page=${page + 1})}">다음 →</a>
+  </p>
+</main>
+</body>
+</html>

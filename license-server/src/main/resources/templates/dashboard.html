@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('대시보드')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1>대시보드</h1>
+  <div class="cards">
+    <div class="card"><div class="muted">서명 키</div>
+      <b th:class="'s-' + ${keyState}" th:text="${keyState}">SEALED</b>
+      <div class="err" th:if="${keyError}" th:text="${keyError}"></div>
+      <div class="muted mono" th:if="${fingerprint}" th:text="${#strings.substring(fingerprint,0,16)} + '…'"></div>
+      <a th:if="${keyState.name() == 'SEALED' and roles.contains('ROLE_ADMIN')}" th:href="@{/keys}">해제하기</a></div>
+    <div class="card"><div class="muted">서버 시각</div>
+      <div th:text="${@fmt.kst(now)}"></div><div class="muted" th:text="${@fmt.utc(now)}"></div></div>
+    <div class="card"><div class="muted">30일 내 만료</div><b th:text="${#lists.size(expiring)} + '건'"></b></div>
+  </div>
+  <h2>30일 내 만료 예정</h2>
+  <p class="muted" th:if="${#lists.isEmpty(expiring)}">없음</p>
+  <table th:unless="${#lists.isEmpty(expiring)}">
+    <tr><th>만료(KST)</th><th>사이트</th><th>프로젝트</th><th></th></tr>
+    <tr th:each="l : ${expiring}"><td th:text="${@fmt.kst(l.notAfter())}"></td><td th:text="${l.siteId()}"></td>
+      <td th:text="${l.projectName()}"></td>
+      <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}">상세</a>
+          <a th:if="${roles.contains('ROLE_ISSUER')}" th:href="@{/licenses/new(from=${l.licenseId()})}">갱신 발급</a></td></tr>
+  </table>
+  <h2>최근 발급</h2>
+  <table>
+    <tr><th>생성(KST)</th><th>상태</th><th>사이트</th><th>프로젝트</th><th>채널(on/off)</th><th>발급자</th></tr>
+    <tr th:each="l : ${recent}"><td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${@fmt.kst(l.createdAt())}"></a></td>
+      <td th:class="'s-' + ${l.status()}" th:text="${l.status()}"></td><td th:text="${l.siteId()}"></td>
+      <td th:text="${l.projectName()}"></td><td th:text="${l.onlineStt()} + ' / ' + ${l.offlineStt()}"></td>
+      <td th:text="${l.issuedByName()}"></td></tr>
+  </table>
+</main>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('2단계 인증')}"></head>
+<body>
+<main class="center">
+  <h1>2단계 인증</h1>
+  <p class="flash error" th:if="${error}" th:text="${error}"></p>
+  <form th:action="@{/mfa}" method="post">
+    <label>OTP 앱의 6자리 코드 <input name="code" required autofocus inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
+    <p><button>확인</button></p>
+  </form>
+  <form th:action="@{/logout}" method="post"><button class="secondary">취소</button></form>
+</main>
+</body>
+</html>

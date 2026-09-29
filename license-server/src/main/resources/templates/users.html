@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('계정 관리')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1>계정 관리</h1>
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <table>
+    <tr><th>사용자</th><th>역할</th><th>상태</th><th>OTP</th><th>잠금</th><th>작업</th></tr>
+    <tr th:each="u : ${users}">
+      <td th:text="${u.username()}"></td><td th:text="${u.role()}"></td>
+      <td th:text="${u.enabled()} ? (${u.mustChangePassword()} ? '활성(비밀번호 변경 대기)' : '활성') : '비활성'"></td>
+      <td th:text="${u.totpEnrolled()} ? '등록' : '미등록'"></td>
+      <td th:text="${u.lockedUntil()} ? ${@fmt.kst(u.lockedUntil())} : ''"></td>
+      <td>
+        <details><summary>작업</summary>
+          <form th:action="@{/users/{id}/enabled(id=${u.id()})}" method="post">
+            <input type="hidden" name="enabled" th:value="${!u.enabled()}">
+            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+            <button class="secondary" th:text="${u.enabled()} ? '비활성화' : '활성화'"></button>
+          </form>
+          <form th:action="@{/users/{id}/reset-password(id=${u.id()})}" method="post">
+            <label>임시 비밀번호 <input type="password" name="tempPassword" required minlength="12" autocomplete="new-password"></label>
+            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+            <button class="secondary">비밀번호 초기화</button>
+          </form>
+          <form th:action="@{/users/{id}/reset-totp(id=${u.id()})}" method="post">
+            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+            <button class="secondary">OTP 초기화</button>
+          </form>
+        </details>
+      </td></tr>
+  </table>
+  <h2>계정 추가</h2>
+  <form th:action="@{/users}" method="post">
+    <label>사용자명 (소문자·숫자·._- 3~32자) <input name="username" required pattern="[a-z0-9._-]{3,32}"></label>
+    <label>역할 <select name="role"><option th:each="r : ${roleValues}" th:value="${r}" th:text="${r}"></option></select></label>
+    <label>임시 비밀번호 (12자 이상, 첫 로그인 때 변경) <input type="password" name="tempPassword" required minlength="12" autocomplete="new-password"></label>
+    <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+    <button>추가</button>
+  </form>
+</main>
+</body>
+</html>

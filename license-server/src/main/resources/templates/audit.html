@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head th:replace="~{fragments/layout :: head('감사 로그')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+  <h1>감사 로그</h1>
+  <form th:action="@{/audit/verify}" method="post" class="row"><button class="secondary">해시 체인 무결성 검사</button></form>
+  <th:block th:if="${chain}">
+    <p th:if="${chain.ok()}" class="flash info" th:text="'정상: ' + ${chain.checked()} + '건, 마지막 해시 ' + ${chain.lastHash()}"></p>
+    <p th:unless="${chain.ok()}" class="flash error" th:text="'변조 탐지: seq ' + ${chain.brokenAtSeq()} + ' — ' + ${chain.reason()}"></p>
+  </th:block>
+  <form th:action="@{/audit}" method="get" class="row"><input name="action" th:value="${action}" placeholder="action (예: ISSUE)" class="w-md"><button>필터</button></form>
+  <table>
+    <tr><th>#</th><th>시각(KST)</th><th>사용자</th><th>행위</th><th>대상</th><th>IP</th><th>상세</th></tr>
+    <tr th:each="e : ${items}"><td th:text="${e.seq()}"></td><td class="nowrap" th:text="${@fmt.kst(e.at())}"></td>
+      <td th:text="${e.actor()}"></td><td th:text="${e.action()}"></td><td class="mono wrap" th:text="${e.target()}"></td>
+      <td th:text="${e.clientIp()}"></td><td class="mono wrap" th:text="${e.detailJson()}"></td></tr>
+  </table>
+</main>
+</body>
+</html>

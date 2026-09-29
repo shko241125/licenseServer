@@ -1,0 +1,9 @@
+server:
+  ssl:
+    enabled: false
+management:
+  server:
+    port: -1
+spring:
+  thymeleaf:
+    cache: false
