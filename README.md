@@ -9,7 +9,9 @@
 | `cmake/SttLicenseHardening.cmake` | `stt_license_harden_shared_library()` — JNI `.so`의 심볼 은닉 |
 | `integration/harness/` | SDK 호출 모델을 흉내 낸 JNI 하네스 + Java 결합 테스트 |
 | `integration/cmake-consumer/` | SDK CMake 빌드를 흉내 낸 소비자 프로젝트(연동 인수 테스트) |
+| `license-server/` | **사내 발급 서버**(Spring Boot, Docker). 로그인·OTP 후 웹에서 발급·검증·이력·감사 — `license-server/README.md` |
 | `docs/sdk-cmake.md` | **SDK CMake 연동 가이드** (옵션, OpenSSL 선택, 문제 해결) |
+| `docs/audit-hash-chain.md` | 발급 서버 감사 로그 해시 체인·앵커 무결성 검사 방법론 |
 | `docs/integration.md` | SDK·서버 적용 가이드(결합 지점, 서버 체크리스트) |
 | `docs/operations.md` | 키 생성·발급·반입·갱신·장애 대응 절차 |
 | `scripts/check.sh` | 전체 검증 (아래) |
