@@ -62,7 +62,23 @@ grep -q "PRIVATE key" <<<"$out" || { echo "private key accepted as public: $out"
 out=$("$L" issue -key "$W/keys/public.key" -in "$W/valid.json" -out "$W/x.lic" 2>&1 || true)
 grep -q "not a licensectl private key" <<<"$out" || { echo "public key accepted for signing: $out"; exit 1; }
 [ ! -e "$W/x.lic" ] || { echo "license written with public key"; exit 1; }
-echo "keygen/issue/verify/ledger OK"
+# 서버 연동용 명령: sign(stdin→stdout, issue 와 바이트 동일), pubkey, verify -json
+python3 - "$W/valid.json" > "$W/fixed.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))
+c.update({"format_version": 1, "license_id": "0123456789abcdef0123456789abcdef"})
+c["validity"]["issued_at"] = "2026-01-01T00:00:00Z"
+print(json.dumps(c, ensure_ascii=False))
+PY
+"$L" issue -key "$W/keys/private.key" -in "$W/fixed.json" -out "$W/fixed-issue.lic" >/dev/null
+{ cat "$W/keys/private.key"; cat "$W/fixed.json"; } | "$L" sign > "$W/fixed-sign.lic"
+cmp -s "$W/fixed-issue.lic" "$W/fixed-sign.lic" || { echo "sign output differs from issue"; exit 1; }
+[ "$("$L" pubkey < "$W/keys/private.key")" = "$(cat "$W/keys/public.key")" ] || { echo "pubkey mismatch"; exit 1; }
+out=$("$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - < "$W/fixed-sign.lic" || true)
+grep -q '"result":"OK"' <<<"$out" || { echo "verify -json failed: $out"; exit 1; }
+out=$(sed 's/"offline_stt": 3/"offline_stt": 30/' "$W/fixed-sign.lic" | "$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - || true)
+grep -q '"result":"LICENSE_BAD_SIGNATURE"' <<<"$out" || { echo "tampered verify -json: $out"; exit 1; }
+echo "keygen/issue/verify/ledger/sign/pubkey/verify -json OK"
 
 step "4. JNI 하네스 빌드 (정적 OpenSSL, JNI 심볼만 export)"
 cmake -S "$ROOT" -B "$B/harness" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTT_LICENSE_BUILD_TESTS=OFF \

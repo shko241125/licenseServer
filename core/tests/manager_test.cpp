@@ -121,7 +121,8 @@ TEST_F(ManagerTest, ChannelMoveSemantics) {
   EXPECT_EQ(m->Snapshot().offline_used, 2);
   c = std::move(b);  // c의 기존 점유분 반납 후 b 인수
   EXPECT_EQ(m->Snapshot().offline_used, 1);
-  c = std::move(c);  // 자기 대입 무해
+  Channel& same = c;  // GCC 13+ -Wself-move 를 피하면서 자기 이동 대입을 검사
+  c = std::move(same);  // 자기 대입 무해
   EXPECT_EQ(m->Snapshot().offline_used, 1);
   // 이미 채널을 가진 out 으로 Acquire: 기존 반납 후 새로 점유 (교착 없음)
   ASSERT_EQ(m->Acquire(Kind::Offline, &c), Error::Ok);
