@@ -8,7 +8,7 @@
 
 | 구성 요소 | 상태 | 비고 |
 |---|---|---|
-| 검증 코어 `stt_license` 1.1.0 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11 |
+| 검증 코어 `stt_license` 1.1.1 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11. 1.1.1: 부모 일반 변수 키 보존(D28) |
 | `licensectl` | 완료 | keygen / issue / verify / sign / pubkey |
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증 |
 | SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~06, `scripts/make-sdk-release.sh`(허용 목록) |
@@ -25,14 +25,15 @@
 | 〃 | 〃 | `./gradlew test` | 39개 통과 |
 | 〃 | 〃 (`--network host`, `TESTCONTAINERS_HOST_OVERRIDE=localhost`) | `./gradlew integrationTest` | 20개 통과 |
 | 〃 | Ubuntu 20.04 컨테이너(CMake 3.16, 헤드리스 JDK 17) | JNI 하네스 빌드 | 성공(`JAVA_HOME` 지정 필요) |
-| 〃 | 로컬 WSL | `scripts/make-sdk-release.sh --worktree --verify` | 풀어낸 SDK 패키지만으로 `check.sh` 통과 |
+| 〃 | 로컬 WSL | `scripts/make-sdk-release.sh --worktree --verify` (1.1.1) | 풀어낸 SDK 패키지만으로 `check.sh` 통과, `[normalvar]` 회귀 시험 포함 |
+| 〃 | Ubuntu 20.04·24.04 컨테이너, 로컬 | 공개키 주입 방식 행렬(CMake 3.16·3.28·4.0) | 일반 변수·FORCE는 고정, CACHE는 `-D`에 덮어써짐(01-build §6.3 표와 일치) |
 
 ## 3. 다음 작업 (우선순위)
 
 1. **[사용자]** 저장소 가시성 결정(현재 **공개**). 공개 이력에 남은 내용 처리 여부 포함 — D26
 2. **[사용자]** claude.ai/code 환경 생성(GitHub 접근, 네트워크 Trusted, setup script `bash scripts/cloud-setup.sh`, 비밀 없음) → §6 시범 운행
 3. **[결정 대기]** 복제 대책 C2 채택 여부(D24), 라이선스 갱신 방식(D18)
-4. **[SDK 저장소]** 적용 S1~S6: CMake 결합, 심볼 은닉, `connect(hostLicense)`, 기존 `.key` 공존, 예약 타임아웃, 서버 오류 처리
+4. **[SDK 저장소]** 적용 S1~S6: CMake 결합(공개키는 `docs/sdk/01-build.md` §6.3 방식), 심볼 은닉, `connect(hostLicense)`, 기존 `.key` 공존, 예약 타임아웃, 서버 오류 처리
 5. **[이 저장소]** CI 구성(`check.sh`, Gradle 두 작업. 공개 저장소면 GitHub Actions 무료)
 6. **[발급 서버]** 남은 일: 백업 암호화, 의존성·이미지 취약점 스캔, 감사 로그 보존 정책, 브라우저 E2E 자동화
 
