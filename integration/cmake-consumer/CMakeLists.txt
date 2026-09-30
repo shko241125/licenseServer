@@ -22,6 +22,11 @@ elseif(MOCK_CRYPTO_MODE STREQUAL "custom_target")
   set(STT_LICENSE_CRYPTO_TARGET sdk_crypto CACHE STRING "" FORCE)
 endif()
 
+# SDK 가 키를 캐시가 아닌 일반 변수로 지정하는 경우(회귀 시험: 이 값이 서브프로젝트에서 지워지면 안 됨)
+if(MOCK_PUBLIC_KEY)
+  set(STT_LICENSE_PUBLIC_KEY_FILE ${MOCK_PUBLIC_KEY})
+endif()
+
 add_subdirectory(${STT_LICENSE_SOURCE_DIR} stt_license)
 
 add_library(mock_sdk_jni SHARED mock_sdk.cpp)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(stt_license VERSION 1.1.0 LANGUAGES CXX)
+project(stt_license VERSION 1.1.1 LANGUAGES CXX)
 
 # 단독 빌드인지, SDK 등에 add_subdirectory/FetchContent 로 포함됐는지 (PROJECT_IS_TOP_LEVEL 은 3.21+ 라 직접 비교)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
@@ -15,10 +15,16 @@ option(STT_LICENSE_BUILD_FUZZ "Build libFuzzer target (clang only)" OFF)
 option(STT_LICENSE_BUILD_HARNESS "Build JNI integration harness" OFF)
 option(STT_LICENSE_WERROR "Treat warnings as errors" ${_stt_top_level})
 option(STT_LICENSE_OPENSSL_STATIC "Prefer static libcrypto when this project runs find_package(OpenSSL)" OFF)
-set(STT_LICENSE_PUBLIC_KEY_FILE "" CACHE FILEPATH
-    "public.key from 'licensectl keygen'. Required by stt_license::embedded (Manager::Open)")
-set(STT_LICENSE_CRYPTO_TARGET "" CACHE STRING
-    "Existing CMake target providing libcrypto (OpenSSL >= 1.1.1). Empty: reuse OpenSSL::Crypto or find_package")
+# 부모가 이미 정한 값(일반 변수 또는 -D 캐시)은 그대로 둔다. cmake_minimum_required(3.16)에서는 CMP0126 이 OLD 라
+# 무조건 set(CACHE) 하면 부모의 일반 변수 set(STT_LICENSE_PUBLIC_KEY_FILE <path>) 가 지워져 키가 사라진다(실측).
+if(NOT DEFINED STT_LICENSE_PUBLIC_KEY_FILE)
+  set(STT_LICENSE_PUBLIC_KEY_FILE "" CACHE FILEPATH
+      "public.key from 'licensectl keygen'. Required by stt_license::embedded (Manager::Open)")
+endif()
+if(NOT DEFINED STT_LICENSE_CRYPTO_TARGET)
+  set(STT_LICENSE_CRYPTO_TARGET "" CACHE STRING
+      "Existing CMake target providing libcrypto (OpenSSL >= 1.1.1). Empty: reuse OpenSSL::Crypto or find_package")
+endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/SttLicenseHardening.cmake)
 

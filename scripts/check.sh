@@ -167,6 +167,11 @@ consumer parent_find -DMOCK_CRYPTO_MODE=parent_find
 consumer custom_target -DMOCK_CRYPTO_MODE=custom_target \
   -DMOCK_LIBCRYPTO_A="$(pkg-config --variable=libdir libcrypto)/libcrypto.a" \
   -DMOCK_OPENSSL_INCLUDE="$(pkg-config --variable=includedir libcrypto)"
+# 부모가 키를 일반 변수로 지정해도 전달돼야 한다(캐시 선언이 부모의 일반 변수를 지우던 문제의 회귀 시험)
+cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-normalvar" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
+  -DMOCK_PUBLIC_KEY="$W/keys/public.key" >/dev/null
+cmake --build "$B/consumer-normalvar" >/dev/null
+printf '[normalvar] '; "$B/consumer-normalvar/mock_sdk_smoke" "$W/valid.lic" "$W/tampered.lic"
 # 키 없이 stt_license::embedded 를 쓰면 명확한 메시지로 빌드가 실패해야 한다
 cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-nokey" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" >/dev/null
 if cmake --build "$B/consumer-nokey" >"$B/consumer-nokey.log" 2>&1 || ! grep -q "STT_LICENSE_PUBLIC_KEY_FILE is not set" "$B/consumer-nokey.log"; then
