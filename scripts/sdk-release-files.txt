@@ -1,0 +1,30 @@
+# SDK 적용용 발행 목록 (scripts/make-sdk-release.sh 가 읽음). 경로 또는 디렉터리, '#' 주석.
+# 여기 없는 것은 패키지에 들어가지 않는다 — 특히 license-server/, work_*/, docs/*.pdf, 키·라이선스 파일.
+# 설명: docs/sdk/RELEASE_MANIFEST.md
+
+# 빌드
+CMakeLists.txt
+cmake/SttLicenseHardening.cmake
+.gitattributes
+
+# 코어 라이브러리 (공개 헤더, 구현, 공개키 내장 템플릿)
+core/include
+core/src
+
+# 코어 검증 (단위 테스트, 골든 벡터, JDK 교차검증, 퍼저)
+core/tests
+core/testdata
+core/fuzz
+
+# 개발·반입 검증용 CLI (개발 키 생성, 시험 라이선스 발급, verify)
+tools/licensectl
+
+# 참조 구현과 연동 인수 테스트
+integration/harness
+integration/cmake-consumer
+
+# 전체 검증
+scripts/check.sh
+
+# 문서
+docs/sdk
