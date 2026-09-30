@@ -142,21 +142,25 @@ add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)
 ```
 - **일반 변수**로 지정한다.
   - 부모의 일반 변수는 캐시보다 우선하므로, 명령줄 `-DSTT_LICENSE_PUBLIC_KEY_FILE=...`로 **덮어쓸 수 없다.** 실수로 개발 키가 운영 빌드에 들어가는 것을 막는다.
-  - 1.1.0 이하에서는 이 방식을 쓰면 키가 사라져 `#error`가 났다. 1.1.1에서 고쳤다.
+  - **절대 경로**로 지정한다(`${CMAKE_SOURCE_DIR}/...`). 일반 변수에 상대 경로를 주면 기준 디렉터리가 모호하므로 구성 단계에서 거부한다.
+  - 1.1.0 이하에서는 이 방식을 쓰면 키가 사라져 `#error`가 났다. **1.1.2 이상을 쓴다**(1.1.1은 아래 회귀가 있음).
 - 개발자는 운영 비밀키가 없으므로, 테스트에는 개발 키가 필요하다.
   - `cmake -DSDK_LICENSE_DEV_KEY=ON -DSDK_LICENSE_DEV_KEY_FILE=$PWD/build/dev-keys/public.key ...`
   - 개발 키와 라이선스를 만드는 방법: [05-testing.md](05-testing.md) §1
 - 배포 빌드 파이프라인은 `SDK_LICENSE_DEV_KEY=OFF`를 강제하고, §6.5 확인을 통과해야 한다.
 
-지정 방식별 동작(1.1.1, CMake 3.16·3.28·4.0 실측):
+지정 방식별 동작(1.1.2, CMake 3.16·3.28·4.0 실측):
 
 | 부모(SDK) CMake에서 | `-D`로 다른 키를 주면 | 평가 |
 |---|---|---|
-| `set(STT_LICENSE_PUBLIC_KEY_FILE <path>)` 일반 변수 | 무시됨(일반 변수 우선) | **권장** — 저장소 파일로 고정 |
+| `set(STT_LICENSE_PUBLIC_KEY_FILE <절대경로>)` 일반 변수 | 무시됨(일반 변수 우선) | **권장** — 저장소 파일로 고정 |
+| `set(STT_LICENSE_PUBLIC_KEY_FILE keys/x.key)` 일반 변수·**상대 경로** | — | 구성 단계에서 거부(`must be an absolute path`) |
 | `set(... CACHE FILEPATH "" FORCE)` | 무시됨 | 가능. 다만 캐시를 매번 덮어써 의도가 덜 드러남 |
 | `set(... CACHE FILEPATH "")` | **`-D` 값이 이김** | 기본값일 뿐 고정이 아님. 개발 키가 섞일 수 있음 |
-| 지정 없이 `cmake -DSTT_LICENSE_PUBLIC_KEY_FILE=<path>` | — | CI 스크립트에서만 쓰는 경우 가능. 어떤 키로 빌드했는지 저장소에 남지 않음 |
+| 지정 없이 `cmake -DSTT_LICENSE_PUBLIC_KEY_FILE=<path>` | — | CI 스크립트에서만 쓰는 경우 가능. 어떤 키로 빌드했는지 저장소에 남지 않음. **상대 경로는 cmake를 실행한 디렉터리 기준**으로 절대 경로가 된다 |
 | 환경 변수 | — | CMake가 자동으로 읽지 않음. 필요하면 `-DSTT_LICENSE_PUBLIC_KEY_FILE="$KEY_PATH"`처럼 셸이 풀어서 넘긴다. 운영 빌드에는 권장하지 않음 |
+
+**1.1.1 회귀(1.1.2에서 수정):** 1.1.1에서는 `-D`의 **상대 경로**가 절대 경로로 바뀌지 않았다. 그래서 라이브러리 디렉터리 기준으로 읽혔고, 그 자리에 다른 `keys/public.key`가 있으면 **그 키가 조용히 내장됐다**(실측). 1.1.1로 빌드한 적이 있으면 §6.5로 확인한다.
 
 주의: 캐시 변수는 빌드 디렉터리(`CMakeCache.txt`)에 남는다. 한 번 `-D`로 개발 키를 준 빌드 디렉터리는 이후에도 그 키를 쓴다. 운영 빌드는 **새 빌드 디렉터리**에서 한다.
 
@@ -164,12 +168,53 @@ add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)
 - 새 `public.key`로 저장소 파일을 바꾸고 SDK를 다시 빌드해 배포한다. 키 파일이 바뀌면 다음 빌드에서 자동으로 재구성된다.
 - 이전 키로 서명된 라이선스는 새 빌드에서 모두 `1004`가 된다. 전 고객 라이선스 재발급이 함께 필요하다.
 
-### 6.5 빌드 후 확인 — 어떤 키가 들어갔나
-키는 `.so` 안에 Base64 문자열로 정확히 한 번 들어간다(실측). 배포 전에 운영 키가 들어갔는지 확인한다.
+### 6.5 빌드 후 확인 — 키가 제대로 내장됐는가
+
+키는 `stt_license` 코어(`libstt_license.a`)가 **아니라** 별도 타깃 `stt_license_key`(= `stt_license::embedded`, 파일 `libstt_license_key.a`)에 들어간다. 그래서 `strings libstt_license.a`로는 항상 **0**이 나온다. 아래 순서로 확인한다.
+
+| 단계 | 확인 대상 | 증명하는 것 |
+|---|---|---|
+| ① 구성 | `CMakeCache.txt`, 생성 소스 | CMake가 **어느 파일**을 읽어 **무슨 값**을 넣었나 |
+| ② 중간 산출물 | `libstt_license_key.a` | 그 값이 컴파일됐나 |
+| ③ 최종 산출물 | SDK `.so` | **배포물**에 운영 키가 들어갔고 개발 키는 없나 (가장 중요) |
+| ④ 동작 | 실제 라이선스로 `connect` | 그 키로 서명된 라이선스만 통과하나 |
+
 ```bash
-strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat keys/stt_license_public.key)"   # 1 이어야 함
-strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat build/dev-keys/public.key)"     # 0 이어야 함 (개발 키 미포함)
+KEY=keys/public.key          # 내장해야 할 키
+B=build                      # 빌드 디렉터리
+
+# ① 구성: 읽은 경로(FILEPATH, 절대 경로여야 함)와 생성 소스의 값
+grep '^STT_LICENSE_PUBLIC_KEY_FILE' $B/CMakeCache.txt
+grep -rlF "\"$(cat $KEY)\"" $B --include=stt_license_embedded_key.cpp        # 파일 경로가 출력되면 OK
+
+# ② 중간 산출물: 서브프로젝트로 넣었으면 경로가 달라지므로 find 로 찾는다
+LIBKEY=$(find $B -name libstt_license_key.a); echo $LIBKEY
+strings -n 44 $LIBKEY | grep -cxF "$(cat $KEY)"                              # 1
+
+# ③ 최종 산출물 (배포하는 .so)
+strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat $KEY)"                  # 1
+strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat build/dev-keys/public.key)"   # 0 (개발 키 없음)
 ```
+- 단독 빌드(저장소 루트에서 `cmake -S . -B build`)에서도 ①·②는 같다. 생성 소스는 `build/generated/stt_license_embedded_key.cpp`, 라이브러리는 `build/libstt_license_key.a`다.
+- ③에서 운영 키가 **0**이면 두 경우 중 하나다.
+  - 다른 키가 들어갔다.
+  - SDK가 검증 함수를 호출하지 않아 링커가 키를 버렸다(`stt_license::embedded`를 링크만 하고 쓰지 않음).
+  - 어느 쪽이든 배포하면 안 된다.
+- `strip`해도 키는 남는다(읽기 전용 데이터 영역). 실측: 정적 OpenSSL을 포함한 `.so`에서도 44자 Base64 문자열은 내장 키 하나뿐이었다.
+
+**키 파일 없이 배포물을 감사할 때** — `.so`에 든 키 후보와 지문을 뽑아 발급 서버의 "공개키 지문"과 대조한다.
+```bash
+strings -n 44 libsonastt_jni_v2.so | grep -xE '[A-Za-z0-9+/]{43}=' |
+  while read k; do printf '%s  %s\n' "$k" "$(printf %s "$k" | base64 -d | sha256sum | cut -d' ' -f1)"; done
+```
+
+**④ 동작 확인(가장 강한 증거)**
+- 운영 빌드:
+  - 발급 서버에서 받은 **실제 라이선스**(예: `poc` 유형 시험 라이선스)로 `connect` → `0`
+  - 개발 키로 서명한 라이선스 → `1004`
+- 개발 빌드: `licensectl`로 만든 개발 라이선스 → `0`, 운영 라이선스 → `1004`
+- 이 저장소에서는 `scripts/check.sh` 7단계가 같은 원리를 확인한다. 소비자 빌드에 내장된 키로 정상 라이선스 `0`, 변조본 `1004`이고, 키 지정 방식별 회귀 시험도 포함한다.
+
 개발 키로 빌드한 `.so`는 **배포하지 않는다.** 그 개발 키의 비밀키를 가진 사람은 누구나 라이선스를 만들 수 있다.
 
 ## 7. 빌드 환경 주의
@@ -182,7 +227,9 @@ strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat build/dev-keys/public.key)
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| `#error "stt_license: STT_LICENSE_PUBLIC_KEY_FILE is not set..."` | 키 파일 미지정. 1.1.0 이하에서는 부모가 **일반 변수**로 지정해도 지워졌음 | §6.3 방식으로 지정(1.1.1 이상), 또는 `-DSTT_LICENSE_PUBLIC_KEY_FILE=<public.key>` |
+| `#error "stt_license: STT_LICENSE_PUBLIC_KEY_FILE is not set..."` | 키 파일 미지정. 1.1.0 이하에서는 부모가 **일반 변수**로 지정해도 지워졌음 | §6.3 방식으로 지정(1.1.2 이상), 또는 `-DSTT_LICENSE_PUBLIC_KEY_FILE=<public.key>` |
+| `STT_LICENSE_PUBLIC_KEY_FILE must be an absolute path` | 부모가 일반 변수로 상대 경로를 줌 | `${CMAKE_SOURCE_DIR}/keys/...`처럼 절대 경로 |
+| `strings libstt_license.a`로 키가 0개 | 키는 코어가 아니라 `libstt_license_key.a`에 있음 | §6.5 |
 | `... is a PRIVATE key. Use public.key` | 비밀키를 공개키 자리에 지정함 | `public.key`로 바꾸고, SDK 저장소·빌드 서버에 비밀키 사본이 남았는지 확인해 삭제 |
 | `...: not a Base64 Ed25519 public key (44 chars)` | 키 파일 손상 또는 다른 파일 | 발급 담당이 준 `public.key` 사용 |
 | `STT_LICENSE_CRYPTO_TARGET='x' is not a target visible here` | 타깃을 `add_subdirectory` 뒤에 정의했거나 형제 디렉터리에 정의함 | 타깃을 먼저, 같은 디렉터리나 상위 디렉터리에서 정의 |

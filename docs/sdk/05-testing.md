@@ -46,7 +46,7 @@ WSL에서는 리눅스 파일시스템(예: `~/work`)에 두고 실행합니다.
 - [ ] 심볼: `nm -D --defined-only libsonastt_jni_v2.so | awk '{print $3}' | grep -v '^Java_'` 출력 없음(또는 SDK가 의도한 공개 C API만)
 - [ ] 정적 암호: `ldd libsonastt_jni_v2.so | grep libcrypto` 출력 없음(SDK가 정적 OpenSSL을 쓰는 경우)
 - [ ] glibc: `objdump -T libsonastt_jni_v2.so | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1` 가 `GLIBC_2.35` 이하
-- [ ] 공개키: 빌드에 쓴 키 파일의 지문이 발급 담당이 알려 준 **운영 지문**과 같음, 그리고 `.so`에 운영 키 문자열이 1회·개발 키는 0회(01-build.md §6.5)
+- [ ] 공개키: 빌드에 쓴 키 파일의 지문이 발급 담당이 알려 준 **운영 지문**과 같음, 그리고 `.so`에 운영 키 문자열이 1회·개발 키는 0회(01-build.md §6.5 ③. `libstt_license.a`가 아니라 최종 `.so`로 확인)
 - [ ] 운영 빌드가 `SDK_LICENSE_DEV_KEY=OFF`, 새 빌드 디렉터리에서 만들어짐(01-build.md §6.3)
 
 **동작** (개발 키 빌드 + 개발 라이선스로)

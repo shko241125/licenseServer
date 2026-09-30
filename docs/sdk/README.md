@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 버전 | 1.1.1 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
+| 버전 | 1.1.2 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
 | 대상 | STT SDK(C++/JNI, `libsonastt_jni_v2.so`) 개발자, STT 서버(Java) 개발자, 현장 설치 엔지니어 |
 | 받는 것 | 이 패키지(소스·문서·검증 도구) + 발급 담당이 주는 **공개키 파일 `public.key`**(Base64 44자) |
 | 받지 않는 것 | 비밀키, 발급 서버. 라이선스 발급은 발급 담당(사내 발급 서버)이 합니다 |
@@ -93,6 +93,7 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 
 | 버전 | 내용 |
 |---|---|
+| 1.1.2 | **1.1.1 회귀 수정:** `-D`의 상대 경로가 절대 경로로 바뀌지 않아 라이브러리 디렉터리 기준으로 읽혔고, 그 자리의 다른 키가 내장될 수 있었음. 부모 일반 변수가 `-D`보다 우선하도록 보장, 일반 변수 상대 경로 거부, 키 경로 회귀 시험 3종, 내장 키 확인 절차(01-build.md §6.5) |
 | 1.1.1 | 부모가 `STT_LICENSE_PUBLIC_KEY_FILE`·`STT_LICENSE_CRYPTO_TARGET`을 **일반 변수**로 지정하면 서브프로젝트에서 지워지던 문제 수정(CMP0126). 공개키 주입 방법론 문서화(01-build.md §6), 헤드리스 JDK에서 JNI 하네스 빌드 수정 |
 | 1.1.0 | 서명 전용 API(`VerifySignature`, `VerifiedLicense`), 값 검증 포함 `VerifyLicense`, 모드 선택 `Verify(VerifyMode)`, `Utf16ToUtf8`(JNI 문자열), `ParseStandardFields`/`StateAt`. CMake 서브프로젝트 지원, `stt_license_harden_shared_library()`, 공개 헤더 C++11 호환, 비밀키 오지정 차단, FIFO 경로 무기한 대기 수정 |
 | 1.0.0 | 파일 경로 기반 `Manager`(기간·채널 한도·재적재), 발급 CLI `licensectl` |
