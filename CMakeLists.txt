@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(stt_license VERSION 1.1.1 LANGUAGES CXX)
+project(stt_license VERSION 1.1.2 LANGUAGES CXX)
 
 # 단독 빌드인지, SDK 등에 add_subdirectory/FetchContent 로 포함됐는지 (PROJECT_IS_TOP_LEVEL 은 3.21+ 라 직접 비교)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
@@ -15,12 +15,22 @@ option(STT_LICENSE_BUILD_FUZZ "Build libFuzzer target (clang only)" OFF)
 option(STT_LICENSE_BUILD_HARNESS "Build JNI integration harness" OFF)
 option(STT_LICENSE_WERROR "Treat warnings as errors" ${_stt_top_level})
 option(STT_LICENSE_OPENSSL_STATIC "Prefer static libcrypto when this project runs find_package(OpenSSL)" OFF)
-# 부모가 이미 정한 값(일반 변수 또는 -D 캐시)은 그대로 둔다. cmake_minimum_required(3.16)에서는 CMP0126 이 OLD 라
-# 무조건 set(CACHE) 하면 부모의 일반 변수 set(STT_LICENSE_PUBLIC_KEY_FILE <path>) 가 지워져 키가 사라진다(실측).
-if(NOT DEFINED STT_LICENSE_PUBLIC_KEY_FILE)
-  set(STT_LICENSE_PUBLIC_KEY_FILE "" CACHE FILEPATH
-      "public.key from 'licensectl keygen'. Required by stt_license::embedded (Manager::Open)")
+# 공개키 경로 결정 규칙 (CMake 3.16·3.28·4.0 실측):
+#  - 부모(SDK)의 일반 변수 set(STT_LICENSE_PUBLIC_KEY_FILE <절대경로>) 가 최우선. -D 로도 바뀌지 않는다(운영 키 고정).
+#  - 그 외에는 -D 캐시 값. FILEPATH 로 선언해야 -D 의 상대 경로가 cmake 실행 디렉터리 기준 절대 경로로 바뀐다.
+# cmake_minimum_required(3.16)에서는 CMP0126 이 OLD 라 set(CACHE) 가 같은 이름의 일반 변수를 지운다.
+# 그래서 부모 일반 변수를 먼저 보관하고, 캐시를 선언(경로 변환)한 뒤 되돌린다.
+set(_stt_key_parent "")
+if(DEFINED STT_LICENSE_PUBLIC_KEY_FILE AND
+   NOT "${STT_LICENSE_PUBLIC_KEY_FILE}" STREQUAL "$CACHE{STT_LICENSE_PUBLIC_KEY_FILE}")
+  set(_stt_key_parent "${STT_LICENSE_PUBLIC_KEY_FILE}")
 endif()
+set(STT_LICENSE_PUBLIC_KEY_FILE "" CACHE FILEPATH
+    "public.key from 'licensectl keygen'. Required by stt_license::embedded (Manager::Open)")
+if(_stt_key_parent)
+  set(STT_LICENSE_PUBLIC_KEY_FILE "${_stt_key_parent}")
+endif()
+# 암호 타깃은 이름(경로 아님)이라 변환이 필요 없다. 부모 값이 있으면 선언하지 않는다(일반 변수가 지워지지 않게).
 if(NOT DEFINED STT_LICENSE_CRYPTO_TARGET)
   set(STT_LICENSE_CRYPTO_TARGET "" CACHE STRING
       "Existing CMake target providing libcrypto (OpenSSL >= 1.1.1). Empty: reuse OpenSSL::Crypto or find_package")
@@ -83,6 +93,12 @@ target_link_libraries(stt_license PUBLIC ${_stt_crypto})
 # ---- 내장 공개키 + Manager::Open (SDK 가 링크하는 타깃: stt_license::embedded) ----
 set(_stt_key_src ${CMAKE_CURRENT_BINARY_DIR}/generated/stt_license_embedded_key.cpp)
 if(STT_LICENSE_PUBLIC_KEY_FILE)
+  # 여기까지 와서도 상대 경로면(부모가 일반 변수로 상대 경로를 줌) 기준 디렉터리가 모호하다. 엉뚱한 키를 조용히
+  # 내장하지 않도록 거부한다. 부모는 ${CMAKE_SOURCE_DIR}/... 처럼 절대 경로로 지정한다.
+  if(NOT IS_ABSOLUTE "${STT_LICENSE_PUBLIC_KEY_FILE}")
+    message(FATAL_ERROR "STT_LICENSE_PUBLIC_KEY_FILE must be an absolute path: ${STT_LICENSE_PUBLIC_KEY_FILE} "
+      "(e.g. \${CMAKE_SOURCE_DIR}/keys/stt_license_public.key)")
+  endif()
   if(NOT EXISTS "${STT_LICENSE_PUBLIC_KEY_FILE}")
     message(FATAL_ERROR "STT_LICENSE_PUBLIC_KEY_FILE not found: ${STT_LICENSE_PUBLIC_KEY_FILE}")
   endif()

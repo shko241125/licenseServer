@@ -172,6 +172,23 @@ cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-normalvar" -G Ninja 
   -DMOCK_PUBLIC_KEY="$W/keys/public.key" >/dev/null
 cmake --build "$B/consumer-normalvar" >/dev/null
 printf '[normalvar] '; "$B/consumer-normalvar/mock_sdk_smoke" "$W/valid.lic" "$W/tampered.lic"
+# 부모 일반 변수는 -D 로 바뀌지 않아야 한다(운영 키 고정): 다른 키를 -D 로 줘도 valid.lic 가 통과해야 함
+cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-pinned" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
+  -DMOCK_PUBLIC_KEY="$W/keys/public.key" -DSTT_LICENSE_PUBLIC_KEY_FILE="$ROOT/core/testdata/golden_public.key" >/dev/null
+cmake --build "$B/consumer-pinned" >/dev/null
+printf '[pinned+D] '; "$B/consumer-pinned/mock_sdk_smoke" "$W/valid.lic" "$W/tampered.lic"
+# -D 상대 경로는 cmake 실행 디렉터리 기준이어야 한다(라이브러리 디렉터리의 다른 keys/public.key 를 읽으면 안 됨)
+(cd "$W" && cmake -S "$ROOT" -B "$B/relkey" -G Ninja -DSTT_LICENSE_BUILD_TESTS=OFF -DSTT_LICENSE_PUBLIC_KEY_FILE=keys/public.key >/dev/null)
+grep -qF "\"$(cat "$W/keys/public.key")\"" "$B/relkey/generated/stt_license_embedded_key.cpp" \
+  || { echo "relative -D key path resolved against the wrong directory"; exit 1; }
+echo "[relative-D] 상대 경로 -D 는 실행 디렉터리 기준으로 해석"
+# 부모가 일반 변수로 상대 경로를 주면 기준이 모호하므로 구성 단계에서 거부
+if cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-relnormal" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
+     -DMOCK_PUBLIC_KEY=keys/public.key >"$B/consumer-relnormal.log" 2>&1 \
+   || ! grep -q "must be an absolute path" "$B/consumer-relnormal.log"; then
+  echo "relative key path in a normal variable was not rejected"; exit 1
+fi
+echo "[relative-normal] 일반 변수 상대 경로 거부 확인"
 # 키 없이 stt_license::embedded 를 쓰면 명확한 메시지로 빌드가 실패해야 한다
 cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-nokey" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" >/dev/null
 if cmake --build "$B/consumer-nokey" >"$B/consumer-nokey.log" 2>&1 || ! grep -q "STT_LICENSE_PUBLIC_KEY_FILE is not set" "$B/consumer-nokey.log"; then
