@@ -129,8 +129,8 @@ c++ -std=c++17 -O2 -shared -fPIC -I"$ROOT/core/include" -I"$ROOT/core/src" $(dir
 if LD_PRELOAD="$W/fake_verify.so" java -Djava.library.path="$W/unprotected" -cp "$B/classes:$W" Preload "$W/license.lic"; then
   echo "control did not bypass: the LD_PRELOAD test is not meaningful"; exit 1
 fi
-# 대조군 2: 현재 STT SDK 와 같은 구성(OpenSSL 정적 링크, 심볼 export) → 정적 링크만으로는 막히지 않음을 확인.
-echo "[대조군 2] 정적 libcrypto + 심볼 export (현재 SDK 구성) → 가로채기 성공해야 함"
+# 대조군 2: OpenSSL 정적 링크 + 심볼 export 구성 → 정적 링크만으로는 막히지 않음을 확인.
+echo "[대조군 2] 정적 libcrypto + 심볼 export → 가로채기 성공해야 함"
 mkdir -p "$W/sdklike"
 c++ -std=c++17 -O2 -shared -fPIC -I"$ROOT/core/include" -I"$ROOT/core/src" $(dirname "$(dirname "$(readlink -f "$(command -v javac)")")" | sed 's|.*|-I&/include -I&/include/linux|') \
   "$ROOT/integration/harness/harness_jni.cpp" "$ROOT"/core/src/{json,crypto,license,manager}.cpp \
@@ -174,7 +174,7 @@ if cmake --build "$B/consumer-nokey" >"$B/consumer-nokey.log" 2>&1 || ! grep -q 
 fi
 echo "[nokey] 키 누락 시 명확한 빌드 오류 확인"
 # 비밀키를 공개키로 지정하면 구성 단계에서 중단 (비밀키가 SDK 바이너리에 내장·배포되는 사고 방지)
-if cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-privkey" -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
+if cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-privkey" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
      -DSTT_LICENSE_PUBLIC_KEY_FILE="$W/keys/private.key" >"$B/consumer-privkey.log" 2>&1 \
    || ! grep -q "is a PRIVATE key" "$B/consumer-privkey.log"; then
   echo "private key was accepted as STT_LICENSE_PUBLIC_KEY_FILE"; exit 1

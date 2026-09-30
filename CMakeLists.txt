@@ -153,10 +153,16 @@ if(STT_LICENSE_BUILD_HARNESS)
   if(NOT STT_LICENSE_PUBLIC_KEY_FILE)
     message(FATAL_ERROR "STT_LICENSE_BUILD_HARNESS requires STT_LICENSE_PUBLIC_KEY_FILE")
   endif()
+  # jni.h 헤더만 쓴다(libjvm·AWT 링크 없음). 기본 find_package(JNI)는 AWT 까지 요구해서
+  # 헤드리스 JDK(서버·클라우드 이미지의 openjdk-*-jdk-headless)에서 실패한다. FindJNI 에는 "헤더만" 컴포넌트가
+  # 없으므로(3.28 기준 AWT/JVM/NativeHelper) 두 라이브러리를 불필요로 표시한다. 헤더 경로 검사는 그대로 남는다.
+  set(JAVA_AWT_LIBRARY NotNeeded)
+  set(JAVA_JVM_LIBRARY NotNeeded)
+  set(JAVA_AWT_INCLUDE_PATH NotNeeded)
   find_package(JNI REQUIRED)
   add_library(stt_harness_jni SHARED integration/harness/harness_jni.cpp)
   _stt_license_setup(stt_harness_jni)
-  target_include_directories(stt_harness_jni PRIVATE ${JNI_INCLUDE_DIRS})
+  target_include_directories(stt_harness_jni PRIVATE ${JAVA_INCLUDE_PATH} ${JAVA_INCLUDE_PATH2})
   target_link_options(stt_harness_jni PRIVATE "LINKER:--no-undefined")
   target_link_libraries(stt_harness_jni PRIVATE stt_license::embedded)
   stt_license_harden_shared_library(stt_harness_jni)  # SDK 에 권장하는 것과 같은 방식
