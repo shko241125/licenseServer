@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(stt_license VERSION 1.0.0 LANGUAGES CXX)
+project(stt_license VERSION 1.1.0 LANGUAGES CXX)
 
 # 단독 빌드인지, SDK 등에 add_subdirectory/FetchContent 로 포함됐는지 (PROJECT_IS_TOP_LEVEL 은 3.21+ 라 직접 비교)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)

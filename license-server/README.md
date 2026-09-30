@@ -70,7 +70,7 @@ docker run --rm -it --network none --user $U --entrypoint java -v $PWD/ceremony:
   --in /work/keys/private.key --out /work/sealed-key.json --licensectl /opt/licensectl
 #  → 패스프레이즈(20자 이상)를 두 번 입력. 출력된 fingerprint 를 기록
 install -m 444 ceremony/sealed-key.json data/key/sealed-key.json
-cp ceremony/keys/public.key ./public.key           # SDK 빌드 담당자에게 전달 (docs/sdk-cmake.md)
+cp ceremony/keys/public.key ./public.key           # SDK 빌드 담당자에게 전달 (../docs/sdk/01-build.md §6, 지문도 함께)
 shred -u ceremony/keys/private.key                  # 평문 비밀키 삭제
 echo "LICENSE_PUBLIC_KEY_FP=<fingerprint>" > .env   # 봉인 파일 바꿔치기 방지용 지문 고정
 echo "LICENSE_BIND_IP=<관리망 IP>" >> .env
@@ -102,7 +102,7 @@ docker compose ps        # web: healthy
 | 갱신 | 상세 화면 → "이 건으로 갱신 발급"(원본 종료 다음 날부터 1년) |
 | 고객 문의 | 검증 화면에 파일을 올리면 서명·상태·만료일을 보여 줍니다 |
 | 백업 | `./backup.sh` (cron 매일). DB 덤프(0600)와 `audit-anchor.log`(마지막 감사 해시). 앵커 파일은 다른 곳에도 보관 |
-| 감사 무결성 | 화면 "해시 체인 무결성 검사"(주 1회) + `./verify-anchors.sh [외부 보관 앵커]`(월 1회). 방법론: `docs/audit-hash-chain.md` |
+| 감사 무결성 | 화면 "해시 체인 무결성 검사"(주 1회) + `./verify-anchors.sh [외부 보관 앵커]`(월 1회). 방법론: `docs/audit-hash-chain.md`(이 디렉터리 기준) |
 | 복원 | `docker compose stop web` → `docker compose exec -T db pg_restore -U postgres -d license --clean < backups/license-<시각>.dump` → `docker compose start web` 후 감사 로그 화면에서 "해시 체인 무결성 검사". 결과의 마지막 해시가 `audit-anchor.log`와 같은지 확인. **분기마다 훈련** |
 | 계정 | 계정 관리 화면에서 추가·비활성화·비밀번호 초기화·OTP 초기화. 비활성화하면 그 사용자의 세션이 즉시 끝납니다 |
 | 재시작 | 재시작하면 키가 봉인 상태로 돌아갑니다. 관리자가 다시 해제해야 합니다 |

@@ -5,15 +5,14 @@
 | 경로 | 내용 |
 |---|---|
 | `core/` | `stt_license` C++17 정적 라이브러리. 엄격 JSON 파서, RFC 8785 정규화, 서명 검증, 기간 판정, 채널 한도 |
-| `tools/licensectl/` | 사내 발급 CLI (`keygen`, `issue`, `verify`) |
+| `tools/licensectl/` | 사내 발급 CLI (`keygen`, `issue`, `verify`, `sign`, `pubkey`) |
 | `cmake/SttLicenseHardening.cmake` | `stt_license_harden_shared_library()` — JNI `.so`의 심볼 은닉 |
 | `integration/harness/` | SDK 호출 모델을 흉내 낸 JNI 하네스 + Java 결합 테스트 |
 | `integration/cmake-consumer/` | SDK CMake 빌드를 흉내 낸 소비자 프로젝트(연동 인수 테스트) |
 | `license-server/` | **사내 발급 서버**(Spring Boot, Docker). 로그인·OTP 후 웹에서 발급·검증·이력·감사 — `license-server/README.md` |
-| `docs/sdk-cmake.md` | **SDK CMake 연동 가이드** (옵션, OpenSSL 선택, 문제 해결) |
-| `docs/audit-hash-chain.md` | 발급 서버 감사 로그 해시 체인·앵커 무결성 검사 방법론 |
-| `docs/integration.md` | SDK·서버 적용 가이드(결합 지점, 서버 체크리스트) |
-| `docs/operations.md` | 키 생성·발급·반입·갱신·장애 대응 절차 |
+| `docs/sdk/` | **SDK 적용 문서** (빌드·코드 결합·STT 서버·규격·테스트·현장 운영) — `docs/sdk/README.md` |
+| `license-server/docs/` | 발급 서버 문서(감사 해시 체인, `licensectl` 발급 측 절차) |
+| `scripts/make-sdk-release.sh` | SDK 적용용 패키지 생성(발급 서버 제외). 목록 `scripts/sdk-release-files.txt`, 설명 `docs/sdk/RELEASE_MANIFEST.md` |
 | `scripts/check.sh` | 전체 검증 (아래) |
 
 ## 빌드
@@ -29,10 +28,10 @@ cmake -S . -B build -G Ninja && cmake --build build
 ./build/licensectl verify -pub build/dev-keys/public.key build/license.lic
 ```
 
-SDK에 넣을 때는 다음과 같이 쓴다. 자세한 내용은 `docs/sdk-cmake.md`를 본다.
+SDK에 넣을 때는 다음과 같이 쓴다. 자세한 내용은 `docs/sdk/01-build.md`를 본다.
 ```cmake
 set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key CACHE FILEPATH "")
-add_subdirectory(third_party/licenseServer EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)   # 발행 패키지를 푼 위치
 target_link_libraries(sonastt_jni_v2 PRIVATE stt_license::embedded)
 stt_license_harden_shared_library(sonastt_jni_v2)
 ```
