@@ -8,7 +8,7 @@
 
 | 구성 요소 | 상태 | 비고 |
 |---|---|---|
-| 검증 코어 `stt_license` 1.1.1 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11. 1.1.1: 부모 일반 변수 키 보존(D28) |
+| 검증 코어 `stt_license` 1.1.2 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11. 1.1.2: 공개키 경로 결정 규칙(D29) — **1.1.1은 상대 `-D` 회귀가 있어 쓰지 않음** |
 | `licensectl` | 완료 | keygen / issue / verify / sign / pubkey |
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증 |
 | SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~06, `scripts/make-sdk-release.sh`(허용 목록) |
@@ -25,8 +25,8 @@
 | 〃 | 〃 | `./gradlew test` | 39개 통과 |
 | 〃 | 〃 (`--network host`, `TESTCONTAINERS_HOST_OVERRIDE=localhost`) | `./gradlew integrationTest` | 20개 통과 |
 | 〃 | Ubuntu 20.04 컨테이너(CMake 3.16, 헤드리스 JDK 17) | JNI 하네스 빌드 | 성공(`JAVA_HOME` 지정 필요) |
-| 〃 | 로컬 WSL | `scripts/make-sdk-release.sh --worktree --verify` (1.1.1) | 풀어낸 SDK 패키지만으로 `check.sh` 통과, `[normalvar]` 회귀 시험 포함 |
-| 〃 | Ubuntu 20.04·24.04 컨테이너, 로컬 | 공개키 주입 방식 행렬(CMake 3.16·3.28·4.0) | 일반 변수·FORCE는 고정, CACHE는 `-D`에 덮어써짐(01-build §6.3 표와 일치) |
+| 〃 | 로컬 WSL | `scripts/make-sdk-release.sh --worktree --verify` (1.1.2) | 풀어낸 SDK 패키지만으로 `check.sh` 통과. 키 경로 회귀 시험 4종(`normalvar`, `pinned+D`, `relative-D`, `relative-normal`) 포함 |
+| 〃 | Ubuntu 20.04·24.04 컨테이너, 로컬 | 공개키 주입 방식 행렬 9종(CMake 3.16·3.28·4.0, 라이브러리 디렉터리에 함정 키 배치) | 세 버전 동일: 절대·상대 `-D` → 지정 키, 일반 변수(+`-D`) → 지정 키 고정, 일반 변수 상대 경로 → 거부, CACHE+`-D` → `-D` 키, FORCE → 고정, 환경 변수 브리지 → 지정 키. 함정 키 내장 0건 |
 
 ## 3. 다음 작업 (우선순위)
 
