@@ -126,7 +126,8 @@ if(STT_LICENSE_BUILD_TESTS)
   add_executable(stt_license_tests
     core/tests/json_test.cpp
     core/tests/license_test.cpp
-    core/tests/manager_test.cpp)
+    core/tests/manager_test.cpp
+    core/tests/verify_test.cpp)
   _stt_license_setup(stt_license_tests)
   target_include_directories(stt_license_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core/src)
   target_compile_definitions(stt_license_tests PRIVATE

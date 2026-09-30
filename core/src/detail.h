@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "crypto.h"
+#include "json.h"
 #include "stt_license/license.h"
 
 namespace stt::license {
@@ -46,7 +47,31 @@ std::string FormatUtcTime(int64_t t);
 
 int64_t SystemNow();
 
+// 서명만 검증한다(표준 필드 해석 없음). root 는 signature 를 뺀 트리, canonical 은 서명 대상 바이트.
+Error VerifyTree(std::string_view bytes, const uint8_t pub[crypto::kPublicKeySize], json::Value* root,
+                 std::string* canonical, std::string* detail);
+
+// VerifySignature 의 공개키 지정판(테스트·도구용). 배포 빌드는 내장 키를 쓰는 VerifySignature 를 쓴다.
+Error VerifySignatureWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize],
+                          VerifiedLicense* out, std::string* detail);
+
+// 시각·공개키 지정판(테스트용). 배포 빌드는 내장 키와 시스템 시각을 쓰는 VerifyLicense / Verify 를 쓴다.
+Error VerifyLicenseWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize], int64_t now,
+                        VerifiedLicense* out, LicenseFields* fields, std::string* detail);
+Error VerifyWith(const std::string& license_text, VerifyMode mode, const uint8_t pub[crypto::kPublicKeySize],
+                 int64_t now, VerifiedLicense* out, LicenseFields* fields, std::string* detail);
+
 namespace detail {
+struct VerifiedData {
+  json::Value root;       // signature 를 뺀, 서명으로 보증된 트리
+  std::string canonical;  // 서명 대상 바이트
+};
+
+struct VerifiedAccess {
+  static void Set(VerifiedLicense* v, std::shared_ptr<const VerifiedData> d) { v->data_ = std::move(d); }
+  static const VerifiedData* Get(const VerifiedLicense& v) { return v.data_.get(); }
+};
+
 struct Config {
   std::array<uint8_t, crypto::kPublicKeySize> public_key{};
   std::function<int64_t()> now = SystemNow;

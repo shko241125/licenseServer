@@ -196,8 +196,8 @@ int64_t SystemNow() {
   return duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
 }
 
-Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKeySize],
-                     LicenseData* out, std::string* detail) {
+Error VerifyTree(std::string_view bytes, const uint8_t pub[crypto::kPublicKeySize], Value* root_out,
+                 std::string* canonical_out, std::string* detail) {
   if (bytes.size() > kMaxFileSize) return Error::FileTooLarge;
   if (bytes.substr(0, 3) == "\xEF\xBB\xBF") bytes.remove_prefix(3);  // 윈도우 메모장 BOM
 
@@ -217,13 +217,193 @@ Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKe
   }
   root.Erase("signature");
 
-  const std::string canonical = json::Canonicalize(root);
+  std::string canonical = json::Canonicalize(root);
   if (!crypto::Ed25519Verify(pub, canonical, sig.data())) {
     if (detail) *detail = "signature does not match license contents";
     return Error::BadSignature;
   }
+  if (root_out) *root_out = std::move(root);
+  if (canonical_out) *canonical_out = std::move(canonical);
+  return Error::Ok;
+}
+
+Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKeySize],
+                     LicenseData* out, std::string* detail) {
+  Value root;
+  if (Error e = VerifyTree(bytes, pub, &root, nullptr, detail); e != Error::Ok) return e;
   // 이 시점 이후의 값은 모두 서명으로 보증된 트리에서만 꺼낸다.
   return ExtractFields(root, out, detail);
+}
+
+// ---- 서명 전용 검증 (공개 API) ----
+
+Error VerifySignatureWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize],
+                          VerifiedLicense* out, std::string* detail) {
+  auto data = std::make_shared<detail::VerifiedData>();
+  Error e = VerifyTree(license_text, pub, &data->root, &data->canonical, detail);
+  if (e != Error::Ok) return e;
+  detail::VerifiedAccess::Set(out, std::move(data));
+  return Error::Ok;
+}
+
+VerifiedLicense::VerifiedLicense() = default;
+
+namespace {
+
+// "a.b.c" 경로를 객체 트리에서 찾는다. 중간이 객체가 아니거나 없으면 nullptr.
+const Value* Lookup(const VerifiedLicense& v, const std::string& path) {
+  const detail::VerifiedData* d = detail::VerifiedAccess::Get(v);
+  if (!d || path.empty()) return nullptr;
+  const Value* cur = &d->root;
+  size_t pos = 0;
+  while (true) {
+    size_t dot = path.find('.', pos);
+    std::string_view key(path.data() + pos, (dot == std::string::npos ? path.size() : dot) - pos);
+    if (key.empty() || cur->type != Value::Type::Object) return nullptr;
+    cur = cur->Find(key);
+    if (!cur) return nullptr;
+    if (dot == std::string::npos) return cur;
+    pos = dot + 1;
+  }
+}
+
+const std::string kEmpty;
+
+}  // namespace
+
+const std::string& VerifiedLicense::canonical_json() const {
+  const detail::VerifiedData* d = detail::VerifiedAccess::Get(*this);
+  return d ? d->canonical : kEmpty;
+}
+
+bool VerifiedLicense::Has(const std::string& path) const { return Lookup(*this, path) != nullptr; }
+
+bool VerifiedLicense::GetString(const std::string& path, std::string* out) const {
+  const Value* v = Lookup(*this, path);
+  if (!v || v->type != Value::Type::String) return false;
+  *out = v->str;
+  return true;
+}
+
+bool VerifiedLicense::GetInt(const std::string& path, std::int64_t* out) const {
+  const Value* v = Lookup(*this, path);
+  if (!v || v->type != Value::Type::Int) return false;
+  *out = v->num;
+  return true;
+}
+
+bool VerifiedLicense::GetBool(const std::string& path, bool* out) const {
+  const Value* v = Lookup(*this, path);
+  if (!v || v->type != Value::Type::Bool) return false;
+  *out = v->boolean;
+  return true;
+}
+
+Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, std::string* detail) {
+  const detail::VerifiedData* d = detail::VerifiedAccess::Get(license);
+  if (!d) {
+    if (detail) *detail = "license is not verified";
+    return Error::InvalidField;
+  }
+  LicenseData l;
+  if (Error e = ExtractFields(d->root, &l, detail); e != Error::Ok) return e;
+  LicenseFields f;
+  f.format_version = l.format_version;
+  f.license_id = l.license_id;
+  f.project_name = l.project_name;
+  f.license_type = l.license_type;
+  f.site_id = l.site_id;
+  f.warning_notice = l.warning_notice;
+  f.online_stt = l.online;
+  f.offline_stt = l.offline;
+  f.issued_at = l.issued_at;
+  f.not_before = l.not_before;
+  f.not_after = l.not_after;
+  f.grace_period_days = l.grace_days;
+  *out = std::move(f);
+  return Error::Ok;
+}
+
+State StateAt(const LicenseFields& f, std::int64_t now) {
+  LicenseData l;
+  l.not_before = f.not_before;
+  l.not_after = f.not_after;
+  l.grace_days = f.grace_period_days;
+  return l.StateAt(now);
+}
+
+Error VerifyLicenseWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize], int64_t now,
+                        VerifiedLicense* out, LicenseFields* fields, std::string* detail) {
+  VerifiedLicense v;
+  if (Error e = VerifySignatureWith(license_text, pub, &v, detail); e != Error::Ok) return e;
+  LicenseFields f;
+  if (Error e = ParseStandardFields(v, &f, detail); e != Error::Ok) return e;
+  switch (StateAt(f, now)) {
+    case State::NotYetValid:
+      if (detail) *detail = "license is not valid before " + FormatUtcTime(f.not_before);
+      return Error::NotYetValid;
+    case State::Expired:
+      if (detail) *detail = "license and grace period ended at " + FormatUtcTime(
+          f.not_after + int64_t{f.grace_period_days} * 86400);
+      return Error::Expired;
+    case State::Valid:
+    case State::Grace:
+      break;
+  }
+  *out = std::move(v);  // 모든 검증을 통과했을 때만 결과를 채운다
+  if (fields) *fields = std::move(f);
+  return Error::Ok;
+}
+
+Error VerifyWith(const std::string& license_text, VerifyMode mode, const uint8_t pub[crypto::kPublicKeySize],
+                 int64_t now, VerifiedLicense* out, LicenseFields* fields, std::string* detail) {
+  switch (mode) {
+    case VerifyMode::SignatureOnly: return VerifySignatureWith(license_text, pub, out, detail);
+    case VerifyMode::Full: return VerifyLicenseWith(license_text, pub, now, out, fields, detail);
+  }
+  if (detail) *detail = "unknown verify mode";
+  return Error::Internal;
+}
+
+const char* VerifyModeName(VerifyMode mode) {
+  return mode == VerifyMode::Full ? "full" : "signature";
+}
+
+bool ParseVerifyMode(const std::string& name, VerifyMode* mode) {
+  if (name == "signature") { *mode = VerifyMode::SignatureOnly; return true; }
+  if (name == "full") { *mode = VerifyMode::Full; return true; }
+  return false;
+}
+
+bool Utf16ToUtf8(const std::uint16_t* s, std::size_t n, std::string* out) {
+  std::string r;
+  r.reserve(n * 3);
+  for (std::size_t i = 0; i < n; ++i) {
+    uint32_t cp = s[i];
+    if (cp >= 0xDC00 && cp <= 0xDFFF) return false;  // 짝 없는 low surrogate
+    if (cp >= 0xD800 && cp <= 0xDBFF) {
+      if (i + 1 >= n || s[i + 1] < 0xDC00 || s[i + 1] > 0xDFFF) return false;  // 짝 없는 high surrogate
+      cp = 0x10000 + ((cp - 0xD800) << 10) + (s[i + 1] - 0xDC00u);
+      ++i;
+    }
+    if (cp < 0x80) {
+      r.push_back(static_cast<char>(cp));
+    } else if (cp < 0x800) {
+      r.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+      r.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp < 0x10000) {
+      r.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+      r.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+      r.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else {
+      r.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+      r.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+      r.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+      r.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+  }
+  *out = std::move(r);
+  return true;
 }
 
 Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kSeedSize],

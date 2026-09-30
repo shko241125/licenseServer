@@ -1,21 +1,50 @@
 // CMake가 STT_LICENSE_PUBLIC_KEY_FILE 로부터 생성한다. 직접 수정하지 말 것.
-// 이 파일이 링크되지 않으면 Manager::Open 이 정의되지 않아 링크 단계에서 실패한다(키 누락 방지).
+// 이 파일이 링크되지 않으면 Manager::Open·VerifySignature 가 정의되지 않아 링크 단계에서 실패한다(키 누락 방지).
 #include <algorithm>
+#include <array>
 #include <vector>
 
 #include "detail.h"
 
 namespace stt::license {
 
-Error Manager::Open(const std::string& path, std::unique_ptr<Manager>* out) {
+namespace {
+bool EmbeddedPublicKey(std::array<uint8_t, crypto::kPublicKeySize>* out) {
   static const char kPublicKeyB64[] = "@STT_LICENSE_PUBLIC_KEY_B64@";
   std::vector<uint8_t> key;
+  if (!crypto::Base64Decode(kPublicKeyB64, &key) || key.size() != out->size()) return false;
+  std::copy(key.begin(), key.end(), out->begin());
+  return true;
+}
+}  // namespace
+
+Error Manager::Open(const std::string& path, std::unique_ptr<Manager>* out) {
   detail::Config cfg;
-  if (!crypto::Base64Decode(kPublicKeyB64, &key) || key.size() != cfg.public_key.size()) {
+  if (!EmbeddedPublicKey(&cfg.public_key)) return Error::Internal;
+  return OpenWith(path, cfg, out);
+}
+
+Error VerifySignature(const std::string& license_text, VerifiedLicense* out, std::string* detail) {
+  std::array<uint8_t, crypto::kPublicKeySize> key{};
+  if (!EmbeddedPublicKey(&key)) {
+    if (detail) *detail = "embedded public key is corrupt";
     return Error::Internal;
   }
-  std::copy(key.begin(), key.end(), cfg.public_key.begin());
-  return OpenWith(path, cfg, out);
+  return VerifySignatureWith(license_text, key.data(), out, detail);
+}
+
+Error VerifyLicense(const std::string& license_text, VerifiedLicense* out, LicenseFields* fields, std::string* detail) {
+  return Verify(license_text, VerifyMode::Full, out, fields, detail);
+}
+
+Error Verify(const std::string& license_text, VerifyMode mode, VerifiedLicense* out, LicenseFields* fields,
+             std::string* detail) {
+  std::array<uint8_t, crypto::kPublicKeySize> key{};
+  if (!EmbeddedPublicKey(&key)) {
+    if (detail) *detail = "embedded public key is corrupt";
+    return Error::Internal;
+  }
+  return VerifyWith(license_text, mode, key.data(), SystemNow(), out, fields, detail);
 }
 
 }  // namespace stt::license
