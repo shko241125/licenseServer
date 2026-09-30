@@ -51,6 +51,17 @@ mk valid 3 2020-01-01T00:00:00Z 2099-12-31T23:59:59Z
 mk more 5 2020-01-01T00:00:00Z 2099-12-31T23:59:59Z
 mk expired 3 2020-01-01T00:00:00Z 2020-12-31T23:59:59Z
 sed 's/"offline_stt": 3/"offline_stt": 30/' "$W/valid.lic" > "$W/tampered.lic"
+# 보조 평면 문자(이모지) + 한글이 든 라이선스: JNI 문자열 변환(변형 UTF-8 함정) 검증용
+python3 - "$W/valid.json" > "$W/emoji.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1])); c["project_name"] = "STT 😀 프로젝트"
+print(json.dumps(c, ensure_ascii=False))
+PY
+"$L" issue -key "$W/keys/private.key" -in "$W/emoji.json" -out "$W/emoji.lic" >/dev/null
+# SDK 설정 파일 흉내 (검증 수준 선택)
+printf -- '--license-verify-mode=signature   # 서명만\n' > "$W/sig.cfg"
+printf -- '# 값까지 검증\n  --license-verify-mode=full\n' > "$W/full.cfg"
+printf -- '--license-verify-mode=FULL\n' > "$W/bad.cfg"
 "$L" verify -pub "$W/keys/public.key" "$W/valid.lic" >/dev/null
 if "$L" verify -pub "$W/keys/public.key" "$W/tampered.lic" >/dev/null; then echo "tampered verified"; exit 1; fi
 if "$L" verify -pub "$W/keys/public.key" "$W/expired.lic" >/dev/null; then echo "expired verified"; exit 1; fi

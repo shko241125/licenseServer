@@ -10,6 +10,8 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <cstdint>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -36,7 +38,27 @@ struct State {
   std::mutex mu;
   std::unique_ptr<lic::Manager> manager;
   std::map<std::string, Session> sessions;  // "sonastt-0", "whisper-3" ...
+  lic::VerifiedLicense host_license;        // connectHostLicense 로 받은, 서명 검증된 라이선스
+  lic::VerifyMode host_mode = lic::VerifyMode::SignatureOnly;
 };
+
+// ★ SDK 설정 파일(sonastt_service.cfg 형식 "--key=value", '#' 주석)에서 검증 수준을 읽는다.
+//   키가 없으면 SignatureOnly(기존 SDK 동작 유지), 값이 잘못되면 false(연결 거부 — 오타로 검증이 약해지지 않게).
+bool ReadVerifyMode(const std::string& config_file, lic::VerifyMode* mode) {
+  *mode = lic::VerifyMode::SignatureOnly;
+  std::ifstream f(config_file);
+  if (!f) return true;  // 설정 파일이 없으면 기본값 (실제 SDK 는 자체 규칙을 따름)
+  const std::string key = "--license-verify-mode=";
+  std::string line;
+  while (std::getline(f, line)) {
+    line = line.substr(0, line.find('#'));
+    size_t b = line.find_first_not_of(" \t\r");
+    if (b == std::string::npos) continue;
+    line = line.substr(b, line.find_last_not_of(" \t\r") - b + 1);
+    if (line.compare(0, key.size(), key) == 0) return lic::ParseVerifyMode(line.substr(key.size()), mode);
+  }
+  return true;
+}
 
 State& G() {
   static State s;
@@ -66,6 +88,23 @@ bool GetString(JNIEnv* env, jstring js, std::string* out) {
   *out = p;
   env->ReleaseStringUTFChars(js, p);
   return true;
+}
+
+// ★ jstring → 표준 UTF-8. GetStringUTFChars 는 변형 UTF-8(보조 평면 문자·NUL 바이트가 다름)이라
+//   서명한 바이트와 달라질 수 있으므로 UTF-16 으로 받아 코어의 Utf16ToUtf8 로 변환한다.
+//   반환: Ok, FileTooLarge(길이 상한 초과), ParseError(짝 없는 서로게이트), Internal(JNI 오류).
+lic::Error JStringToUtf8(JNIEnv* env, jstring js, std::string* out) {
+  const jsize n = env->GetStringLength(js);
+  if (n < 0) return lic::Error::Internal;
+  if (static_cast<size_t>(n) > 64 * 1024) return lic::Error::FileTooLarge;  // UTF-8 로 바꾸기 전에 상한
+  std::vector<jchar> buf(static_cast<size_t>(n));
+  if (n > 0) env->GetStringRegion(js, 0, n, buf.data());
+  if (env->ExceptionCheck()) return lic::Error::Internal;
+  static_assert(sizeof(jchar) == sizeof(std::uint16_t), "jchar must be 16-bit");
+  if (!lic::Utf16ToUtf8(reinterpret_cast<const std::uint16_t*>(buf.data()), buf.size(), out)) {
+    return lic::Error::ParseError;
+  }
+  return lic::Error::Ok;
 }
 
 // C++ 예외가 JVM 으로 넘어가면 프로세스가 죽는다. 모든 진입점을 이것으로 감싼다.
@@ -173,12 +212,95 @@ JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_reloadLicense(JNIEnv*, job
   }, jint{kErrInternal});
 }
 
+// ---- 실제 STT 서버 API 형태: connect(SonaSttListener callback, String sttHomePath, String hostLicense) ----
+// 공통 코어는 서명만 검증하고, 어떤 값을 쓸지(채널·기간 등)는 SDK 가 정한다.
+JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_connectHostLicense(JNIEnv* env, jobject, jobject /*callback*/,
+                                                                          jstring configFile,
+                                                                          jstring hostLicense) {
+  return Guard([&]() -> jint {
+    if (hostLicense == nullptr) return kErrInvalidArgument;
+    std::string cfg;
+    lic::VerifyMode mode;
+    if (configFile != nullptr && !GetString(env, configFile, &cfg)) return kErrInvalidArgument;  // 경로는 ASCII 전제
+    if (!ReadVerifyMode(cfg, &mode)) return kErrInvalidArgument;                                 // 잘못된 모드 값
+    std::string text;
+    lic::Error e = JStringToUtf8(env, hostLicense, &text);
+    lic::VerifiedLicense verified;
+    lic::LicenseFields fields;
+    std::string detail;
+    // ★ 공통 진입점: SignatureOnly = 서명만 / Full = 서명 + 표준 필드 + 기간 (분리 함수 VerifySignature·VerifyLicense 와 동일)
+    if (e == lic::Error::Ok) e = lic::Verify(text, mode, &verified, &fields, &detail);
+    if (e != lic::Error::Ok) return LicenseCode(e);                               // 검증 실패 → 연결 거부
+    State& g = G();
+    std::lock_guard<std::mutex> lock(g.mu);
+    g.host_license = verified;
+    g.host_mode = mode;
+    // ★ 여기부터는 SDK 정책 영역: 예) allowed_channels 가 있으면 세션 수 상한으로 쓰고, 없으면 기존 설정 유지.
+    //    기간 검사를 할지(ParseStandardFields + StateAt), 무시할지도 SDK 가 정한다.
+    return 0;
+  }, jint{kErrInternal});
+}
+
+// SDK 가 검증된 값을 어떻게 꺼내는지 보여 주는 조회용 (테스트에서 확인).
+JNIEXPORT jstring JNICALL Java_licenseharness_SttHarness_hostLicenseInfo(JNIEnv* env, jobject) {
+  std::string out = Guard([&]() -> std::string {
+    State& g = G();
+    std::lock_guard<std::mutex> lock(g.mu);
+    const lic::VerifiedLicense& v = g.host_license;
+    if (!v.valid()) return ErrorJson(kErrNotConnected, "NOT_CONNECTED", "no verified host license");
+    std::int64_t offline = -1, online = -1;
+    std::string site, not_after, project;
+    v.GetInt("allowed_channels.offline_stt", &offline);   // 없으면 -1 (SDK 기본값 사용 신호)
+    v.GetInt("allowed_channels.online_stt", &online);
+    v.GetString("site_id", &site);
+    v.GetString("validity.not_after", &not_after);
+    v.GetString("project_name", &project);
+    lic::LicenseFields f;
+    lic::Error std_e = lic::ParseStandardFields(v, &f);    // 선택: 표준 규칙 판정 결과만 알려 줌
+    return "{\"result\":0,\"offline_stt\":" + std::to_string(offline) + ",\"online_stt\":" + std::to_string(online) +
+           ",\"site_id\":" + Quote(site) + ",\"not_after\":" + Quote(not_after) +
+           ",\"project_name\":" + Quote(project) + ",\"standard\":" + Quote(lic::ErrorName(std_e)) +
+           ",\"mode\":" + Quote(lic::VerifyModeName(g.host_mode)) +
+           ",\"canonical_bytes\":" + std::to_string(v.canonical_json().size()) + "}";
+  }, ErrorJson(kErrInternal, "INTERNAL", "internal error"));
+  // 반환 문자열에 비 ASCII(한글 등)가 있을 수 있어 NewStringUTF(변형 UTF-8 입력) 대신 UTF-16 으로 만든다.
+  std::u16string u16;
+  for (size_t i = 0; i < out.size();) {
+    unsigned char c = static_cast<unsigned char>(out[i]);
+    int len = c < 0x80 ? 1 : c < 0xE0 ? 2 : c < 0xF0 ? 3 : 4;
+    uint32_t cp = len == 1 ? c : len == 2 ? (c & 0x1F) : len == 3 ? (c & 0x0F) : (c & 0x07);
+    for (int k = 1; k < len && i + k < out.size(); ++k) cp = (cp << 6) | (static_cast<unsigned char>(out[i + k]) & 0x3F);
+    i += static_cast<size_t>(len);
+    if (cp >= 0x10000) {
+      cp -= 0x10000;
+      u16.push_back(static_cast<char16_t>(0xD800 + (cp >> 10)));
+      u16.push_back(static_cast<char16_t>(0xDC00 + (cp & 0x3FF)));
+    } else {
+      u16.push_back(static_cast<char16_t>(cp));
+    }
+  }
+  return env->NewString(reinterpret_cast<const jchar*>(u16.data()), static_cast<jsize>(u16.size()));
+}
+
+// 대조군: GetStringUTFChars(변형 UTF-8)로 받아 검증하면 보조 평면 문자가 있는 정상 라이선스가 실패함을 보인다.
+// 실제 SDK 에서 쓰면 안 되는 방식이다.
+JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_verifyViaModifiedUtf8(JNIEnv* env, jobject, jstring s) {
+  return Guard([&]() -> jint {
+    std::string text;
+    if (!GetString(env, s, &text)) return kErrInvalidArgument;  // GetStringUTFChars
+    lic::VerifiedLicense v;
+    lic::Error e = lic::VerifySignature(text, &v);
+    return e == lic::Error::Ok ? 0 : LicenseCode(e);
+  }, jint{kErrInternal});
+}
+
 JNIEXPORT void JNICALL Java_licenseharness_SttHarness_disconnect(JNIEnv*, jobject) {
   Guard([&]() -> int {
     State& g = G();
     std::lock_guard<std::mutex> lock(g.mu);
     g.sessions.clear();  // Channel 소멸 → 반납
     g.manager.reset();
+    g.host_license = lic::VerifiedLicense();
     return 0;
   }, 0);
 }

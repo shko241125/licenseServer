@@ -113,6 +113,40 @@ public class HarnessTest {
     check(intField(info, "offline_used") == 0 && intField(info, "sessions_busy") == 0, "종료 후 사용량 0 (누수 없음)");
     check(limitHits.get() > 0, "한도 초과 거부 발생 " + limitHits.get() + "회");
 
+    System.out.println("[hostLicense 문자열 → 서명만 검증 (실제 connect(callback, sttHomePath, hostLicense) 형태)]");
+    // 서버 측 권장 읽기 방식: 바이트를 UTF-8 로 디코드 (BOM 이 있으면 코어가 제거)
+    String valid = new String(Files.readAllBytes(dir.resolve("valid.lic")), java.nio.charset.StandardCharsets.UTF_8);
+    String tampered = new String(Files.readAllBytes(dir.resolve("tampered.lic")), java.nio.charset.StandardCharsets.UTF_8);
+    String emoji = new String(Files.readAllBytes(dir.resolve("emoji.lic")), java.nio.charset.StandardCharsets.UTF_8);
+    check(sdk.connectHostLicense(null, "/app/home", valid) == 0, "정상 라이선스 문자열 → 0");
+    String hinfo = sdk.hostLicenseInfo();
+    check(intField(hinfo, "offline_stt") == 3 && "OK".equals(field(hinfo, "standard")),
+        "SDK 가 서명된 값 사용: offline_stt=3, 표준 규칙 판정 OK " + hinfo);
+    check(sdk.connectHostLicense(null, "/app/home", tampered) == 1004, "변조 문자열 → 1004 BAD_SIGNATURE");
+    check(sdk.connectHostLicense(null, "/app/home", null) == 2, "null → 2 INVALID_ARGUMENT");
+    check(sdk.connectHostLicense(null, "/app/home", "") == 1003, "빈 문자열 → 1003 PARSE_ERROR");
+    check(sdk.connectHostLicense(null, "/app/home", "\uFEFF" + valid.replace("\n", "\r\n")) == 0,
+        "BOM + CRLF 로 바뀐 문자열도 0 (서명은 정규화된 내용 기준)");
+    check(sdk.connectHostLicense(null, "/app/home", "x".repeat(70_000)) == 1002, "64K 문자 초과 → 1002");
+    check(sdk.connectHostLicense(null, "/app/home", emoji) == 0, "보조 평면 문자(😀) 포함 라이선스 → 0 (UTF-16 경로)");
+    check(field(sdk.hostLicenseInfo(), "project_name").contains("😀"), "project_name 의 😀 가 그대로 복원됨");
+    int modified = sdk.verifyViaModifiedUtf8(emoji);
+    check(modified != 0, "대조군: 같은 라이선스를 GetStringUTFChars(변형 UTF-8)로 받으면 실패 → " + modified);
+    check(sdk.verifyViaModifiedUtf8(valid) == 0, "대조군: ASCII·한글만 있으면 변형 UTF-8 도 통과 (그래서 놓치기 쉬움)");
+
+    System.out.println("[검증 수준 선택: configFile 의 --license-verify-mode (서명만 / 값까지)]");
+    String expired = new String(Files.readAllBytes(dir.resolve("expired.lic")), java.nio.charset.StandardCharsets.UTF_8);
+    String sigCfg = dir.resolve("sig.cfg").toString(), fullCfg = dir.resolve("full.cfg").toString();
+    String badCfg = dir.resolve("bad.cfg").toString(), noCfg = dir.resolve("none.cfg").toString();
+    check(sdk.connectHostLicense(null, noCfg, expired) == 0
+        && "signature".equals(field(sdk.hostLicenseInfo(), "mode")), "설정 없음 → 기본 signature: 만료 라이선스도 서명만 맞으면 0");
+    check(sdk.connectHostLicense(null, sigCfg, expired) == 0, "signature 모드: 만료 라이선스 → 0 (값 판정은 SDK 몫)");
+    check(sdk.connectHostLicense(null, fullCfg, expired) == 1008, "full 모드: 만료 라이선스 → 1008 EXPIRED");
+    check(sdk.connectHostLicense(null, fullCfg, valid) == 0
+        && "full".equals(field(sdk.hostLicenseInfo(), "mode")), "full 모드: 유효 라이선스 → 0");
+    check(sdk.connectHostLicense(null, fullCfg, tampered) == 1004, "full 모드: 변조 → 1004 (서명 검증이 먼저)");
+    check(sdk.connectHostLicense(null, badCfg, valid) == 2, "잘못된 모드 값(오타) → 2, 조용히 약한 검증으로 넘어가지 않음");
+
     sdk.disconnect();
     check(result(sdk.getSTTSessionInfo()) == 3, "disconnect 후 NOT_CONNECTED");
 
