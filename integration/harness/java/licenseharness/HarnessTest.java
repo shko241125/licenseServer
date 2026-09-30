@@ -134,6 +134,20 @@ public class HarnessTest {
     check(modified != 0, "대조군: 같은 라이선스를 GetStringUTFChars(변형 UTF-8)로 받으면 실패 → " + modified);
     check(sdk.verifyViaModifiedUtf8(valid) == 0, "대조군: ASCII·한글만 있으면 변형 UTF-8 도 통과 (그래서 놓치기 쉬움)");
 
+    // 기존 sonaLicense.*.key 를 흉내 낸 합성 데이터: ASCII 범위 바이트 + 제어문자 + NUL (실제 고객 파일은 쓰지 않음)
+    byte[] legacy = new byte[256];
+    for (int i = 0; i < legacy.length; i++) legacy[i] = (byte) ((i * 37 + 11) % 128);
+    legacy[100] = 0;
+    String legacyStr = new String(legacy, java.nio.charset.StandardCharsets.UTF_8);
+    check(java.util.Arrays.equals(legacyStr.getBytes(java.nio.charset.StandardCharsets.UTF_8), legacy),
+        "기존 .key 형태(ASCII+제어문자+NUL): readAllBytes → UTF-8 String 왕복 보존");
+    check(java.util.Arrays.equals(sdk.toUtf8Bytes(legacyStr, false), legacy),
+        "UTF-16 경로: NUL·제어문자 포함 256바이트 그대로 복원");
+    byte[] viaModified = sdk.toUtf8Bytes(legacyStr, true);
+    check(!java.util.Arrays.equals(viaModified, legacy),
+        "대조군: GetStringUTFChars 는 NUL 을 C0 80 으로 바꿔 바이트가 달라짐 (" + legacy.length + " → " + viaModified.length + ")");
+    check(sdk.connectHostLicense(null, "/app/home", legacyStr) == 1003, "기존 .key 형태 → 1003 PARSE_ERROR (SDK 가 기존 경로로 분기할 조건)");
+
     System.out.println("[검증 수준 선택: configFile 의 --license-verify-mode (서명만 / 값까지)]");
     String expired = new String(Files.readAllBytes(dir.resolve("expired.lic")), java.nio.charset.StandardCharsets.UTF_8);
     String sigCfg = dir.resolve("sig.cfg").toString(), fullCfg = dir.resolve("full.cfg").toString();

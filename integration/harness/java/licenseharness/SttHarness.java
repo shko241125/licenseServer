@@ -32,5 +32,8 @@ public class SttHarness {
   /** 대조군: GetStringUTFChars(변형 UTF-8) 경로로 검증. 실제 SDK 에서 쓰면 안 되는 방식. */
   public native int verifyViaModifiedUtf8(String hostLicense);
 
+  /** 문자열 → UTF-8 바이트 변환 결과. modifiedUtf8=false 는 SDK 권장 경로(UTF-16), true 는 대조군. */
+  public native byte[] toUtf8Bytes(String s, boolean modifiedUtf8);
+
   public native void disconnect();
 }

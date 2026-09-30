@@ -294,6 +294,27 @@ JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_verifyViaModifiedUtf8(JNIE
   }, jint{kErrInternal});
 }
 
+// 문자열 변환 결과 바이트를 돌려준다(기존 .key 처럼 NUL·제어문자가 든 입력의 보존 여부 확인용).
+// modified=false: ★ UTF-16 경로(JStringToUtf8), true: 대조군 GetStringUTFChars.
+JNIEXPORT jbyteArray JNICALL Java_licenseharness_SttHarness_toUtf8Bytes(JNIEnv* env, jobject, jstring s,
+                                                                      jboolean modified) {
+  return Guard([&]() -> jbyteArray {
+    if (s == nullptr) return nullptr;
+    std::string bytes;
+    if (modified) {
+      if (!GetString(env, s, &bytes)) return nullptr;
+    } else if (JStringToUtf8(env, s, &bytes) != lic::Error::Ok) {
+      return nullptr;
+    }
+    jbyteArray out = env->NewByteArray(static_cast<jsize>(bytes.size()));
+    if (out != nullptr && !bytes.empty()) {
+      env->SetByteArrayRegion(out, 0, static_cast<jsize>(bytes.size()),
+                              reinterpret_cast<const jbyte*>(bytes.data()));
+    }
+    return out;
+  }, static_cast<jbyteArray>(nullptr));
+}
+
 JNIEXPORT void JNICALL Java_licenseharness_SttHarness_disconnect(JNIEnv*, jobject) {
   Guard([&]() -> int {
     State& g = G();
