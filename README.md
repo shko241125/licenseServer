@@ -13,7 +13,10 @@
 | `docs/sdk/` | **SDK 적용 문서** (빌드·코드 결합·STT 서버·규격·테스트·현장 운영) — `docs/sdk/README.md` |
 | `license-server/docs/` | 발급 서버 문서(감사 해시 체인, `licensectl` 발급 측 절차) |
 | `scripts/make-sdk-release.sh` | SDK 적용용 패키지 생성(발급 서버 제외). 목록 `scripts/sdk-release-files.txt`, 설명 `docs/sdk/RELEASE_MANIFEST.md` |
+| `docs/dev/` | 작업 상태(`STATUS.md`)와 결정 기록(`DECISIONS.md`) — 새 세션·클라우드에서 이어 작업할 때의 출발점 |
+| `CLAUDE.md` | Claude Code 세션 안내(읽는 순서, 검증 명령, 금지 사항, 작업 종료 절차) |
 | `scripts/check.sh` | 전체 검증 (아래) |
+| `scripts/cloud-setup.sh` | 새 Ubuntu·클라우드 환경에 검증 도구 준비(없는 것만 설치) |
 
 ## 빌드
 
