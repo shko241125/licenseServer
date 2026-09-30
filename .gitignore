@@ -19,3 +19,8 @@ private.key
 license-server/deploy/secrets/
 license-server/deploy/data/
 license-server/.gradle/
+
+# 편집기 임시 파일
+*.swp
+*.swo
+*~

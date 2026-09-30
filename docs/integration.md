@@ -58,6 +58,87 @@ nm -D --defined-only libsonastt_jni_v2.so | awk '{print $3}' | grep -v '^Java_' 
 
 ---
 
+### 1.5 라이선스 내용을 문자열로 받는 방식 — 실제 `connect(callback, configFile, hostLicense)`
+
+STT 서버는 라이선스 **파일 경로가 아니라 내용**을 SDK에 넘긴다.
+```java
+// STT 서버 (Java)
+public int createSonaSTT(SonaSttListener callback, String configFile, String hostLicense) {
+    return this.connect(callback, configFile, hostLicense);   // private native int connect(...)
+}
+// hostLicense 준비: 바이트를 UTF-8 로 디코드 (BOM 은 코어가 제거)
+String hostLicense = new String(Files.readAllBytes(Path.of(System.getenv("LICENSE_FILE_PATH"))), StandardCharsets.UTF_8);
+```
+
+#### 검증 API 고르기
+공통 코어는 **서명 검증**을 책임진다. 값(`allowed_channels`, `validity` 등)을 쓸지와 어떻게 판정할지는 기존 SDK와의 호환을 고려해 SDK가 정한다.
+
+| 함수 | 검증 범위 | 언제 |
+|---|---|---|
+| `VerifySignature(text, &v)` | 서명만(크기·JSON·서명 형식·Ed25519) | 값 정책을 SDK가 직접 정할 때(기존 동작 유지) |
+| `VerifyLicense(text, &v, &fields)` | 서명 + 표준 필드(필수·범위·`format_version`) + 기간(미개시·만료면 실패, 유예는 통과) | 코어 규칙을 그대로 쓸 때 |
+| `Verify(text, VerifyMode, &v, &fields)` | 모드에 따라 위 둘 중 하나와 **완전히 같음** | 설정값으로 전환할 때(`ParseVerifyMode("signature"/"full")`) |
+| `ParseStandardFields(v, &fields)` + `StateAt(fields, now)` | 서명 검증 뒤 필요한 판정만 골라서 | 일부만 적용할 때(예: 필드는 쓰고 기간은 무시) |
+| `v.GetInt("allowed_channels.offline_stt", &n)` 등 | 값 꺼내기만(판정 없음) | 특정 값만 참조할 때. 값은 서명된 내용에서만 나온다 |
+
+`true/false` 인자 대신 `VerifyMode` 열거형을 받는 이유: `Verify(text, true, …)`는 호출하는 곳에서 뜻이 읽히지 않고, 설정 파일 값과 바로 대응시킬 수도 없다.
+
+#### SDK JNI 구현 예 (실행 검증: `integration/harness/harness_jni.cpp`의 `connectHostLicense`)
+```cpp
+#include "stt_license/license.h"
+namespace lic = stt::license;
+
+// jstring → 표준 UTF-8.  GetStringUTFChars 를 쓰면 안 된다(아래 주의 1).
+static lic::Error JStringToUtf8(JNIEnv* env, jstring js, std::string* out) {
+  const jsize n = env->GetStringLength(js);
+  if (n > 64 * 1024) return lic::Error::FileTooLarge;
+  std::vector<jchar> buf(n);
+  if (n > 0) env->GetStringRegion(js, 0, n, buf.data());
+  if (env->ExceptionCheck()) return lic::Error::Internal;
+  return lic::Utf16ToUtf8(reinterpret_cast<const std::uint16_t*>(buf.data()), buf.size(), out)
+             ? lic::Error::Ok : lic::Error::ParseError;
+}
+
+JNIEXPORT jint JNICALL Java_<패키지>_<클래스>_connect(JNIEnv* env, jobject self, jobject callback,
+                                                     jstring configFile, jstring hostLicense) {
+  try {
+    if (hostLicense == nullptr) return /* 기존 SDK 의 잘못된 인자 코드 */ 2;
+    lic::VerifyMode mode = lic::VerifyMode::SignatureOnly;           // 기본: 기존 SDK 동작 유지
+    // configFile 의 "--license-verify-mode=signature|full" 을 읽는다. 값이 잘못되면 연결 거부(오타로 약해지지 않게).
+    //   if (has_key && !lic::ParseVerifyMode(value, &mode)) return 2;
+    std::string text;
+    lic::Error e = JStringToUtf8(env, hostLicense, &text);
+    lic::VerifiedLicense license;
+    lic::LicenseFields fields;
+    std::string detail;
+    if (e == lic::Error::Ok) e = lic::Verify(text, mode, &license, &fields, &detail);
+    if (e != lic::Error::Ok) { /* log lic::ErrorName(e), detail */ return 1000 + static_cast<int>(e); }
+
+    // ---- 여기부터 SDK 정책 ----
+    std::int64_t offline = 0;
+    if (license.GetInt("allowed_channels.offline_stt", &offline)) { /* 세션 수 상한 = min(cfg, offline) */ }
+    // 기존 FoneLicense 설정과 병행한다면: 라이선스 값이 없을 때 cfg 값 유지 등
+    // ... 기존 connect 처리 계속
+    return 0;
+  } catch (...) {
+    return /* 내부 오류 코드 */ 9;  // C++ 예외가 JVM 으로 넘어가면 프로세스가 죽는다
+  }
+}
+```
+
+#### 주의
+1. **`GetStringUTFChars` 금지.** 이 함수는 표준 UTF-8이 아니라 **변형 UTF-8**을 돌려준다. 보조 평면 문자(이모지 등)와 NUL의 바이트가 달라서, **서명한 바이트와 달라져 정상 라이선스가 검증에 실패한다.** 실제 JVM에서 대조 실험으로 확인했다: 이모지가 든 라이선스는 `GetStringUTFChars` 경로에서 `1003`, UTF-16 경로에서 `0`. ASCII와 한글만 있으면 두 경로 모두 통과해서 평소 테스트로는 드러나지 않는다.
+2. **라이선스 갱신 방식은 미정(추후 결정, 2026-09-30).** SDK가 파일 경로를 모르므로 `Manager`의 60초 재적재가 적용되지 않는다. 결정 전까지 갱신은 서버를 재시작해 `connect`를 다시 부르는 방법뿐이다. 분석할 항목:
+   - 세션(채널) 수 반영: `connect` 때 이미 만든 세션 풀(GPU 메모리)을 늘리거나 줄일 수 있는가, 진행 중인 작업은 어떻게 하는가
+   - `connect` 재호출이 SDK에서 안전한가, 아니면 `updateLicense(String)` 같은 별도 native가 필요한가
+   - **`full` 모드도 기간을 `connect` 시점에만 검사한다.** 재시작 없이 오래 도는 서버는 만료일이 지나도 계속 동작하므로, 운영 중 재판정 방식도 함께 정해야 한다
+3. **`signature` 모드(기본)는 호환 장치다(결정, 2026-09-30).** 값(기간 포함)은 코어가 판정하지 않고, SDK의 기존 만료 장치(time-lock)가 적용된다. 전제 조건:
+   - 이 모드가 받아 주는 것은 **새 형식(서명된 JSON) 라이선스**뿐이다. 기존 난독화 `sonaLicense.*.key` 파일은 어떤 모드에서도 `1003`(파싱 오류)이다(실제 파일로 확인). 기존 `.key`까지 받으려면 SDK가 형식을 판별해 기존 `CFoneLicense` 경로로 보내야 한다
+   - SDK의 기존 만료 장치가 **새 형식 라이선스로 연결할 때도** 실제로 걸리는지 확인한다. 만료일을 `.key` 파일에서 읽는 구조라면 새 형식에는 적용되지 않는다. 그 경우 `license.GetString("validity.not_after", …)`로 새 라이선스의 만료일을 SDK 정책에 넘겨야 한다
+4. 오류 코드는 `1000 + Error 순번`이다: 1002 크기 초과, 1003 파싱, 1004 서명, 1005 필드, 1006 버전, 1007 미개시, 1008 만료, 1010 내부.
+
+---
+
 ## 2. 서버 (Spring Boot, Java 17)
 
 서버 소스는 이 저장소에 없다. 아래는 이미지에서 확인한 클래스 구조를 기준으로 한 **체크리스트**다.

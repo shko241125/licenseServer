@@ -98,7 +98,19 @@ SDK 상황별 설정:
 
 ## 6. 코드 결합
 
-결합 지점(`connectSonaSTT`, `getIdleSession`, 작업 종료, `getSTTSessionInfo`)과 오류 코드는 `docs/integration.md` §1.3~1.4에 있다. 실행으로 검증한 참조 구현은 `integration/harness/harness_jni.cpp`의 ★ 표시 지점이다.
+두 가지 방식이 있다. 실행으로 검증한 참조 구현은 `integration/harness/harness_jni.cpp`의 ★ 표시 지점이다.
+
+**(A) 라이선스 내용을 문자열로 받고, 검증 수준을 SDK가 고르는 방식** — 실제 `connect(callback, configFile, hostLicense)`. 자세한 내용은 `docs/integration.md` §1.5.
+```cpp
+lic::VerifiedLicense license;
+lic::LicenseFields fields;
+lic::Error e = lic::Verify(text_utf8, lic::VerifyMode::SignatureOnly /* 또는 Full */, &license, &fields);
+// 분리 함수: lic::VerifySignature(text, &license)  /  lic::VerifyLicense(text, &license, &fields)
+std::int64_t offline;
+license.GetInt("allowed_channels.offline_stt", &offline);   // 값 사용 여부는 SDK 정책
+```
+
+**(B) 파일 경로 + 값 정책(기간·채널 한도·재적재)을 코어에 맡기는 방식.** 결합 지점(`connectSonaSTT`, `getIdleSession`, 작업 종료, `getSTTSessionInfo`)과 오류 코드는 `docs/integration.md` §1.3~1.4.
 
 ```cpp
 #include "stt_license/license.h"   // C++11 이상
