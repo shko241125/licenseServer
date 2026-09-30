@@ -31,7 +31,7 @@
 docker build -f license-server/Dockerfile -t license-server:1.0.0 .
 ```
 
-- 빌드 중에 C++ 코어 테스트(38개)와 서버 단위 테스트(39개)가 실행됩니다. 하나라도 실패하면 이미지가 만들어지지 않습니다.
+- 빌드 중에 C++ 코어 단위 테스트와 서버 단위 테스트가 실행됩니다. 하나라도 실패하면 이미지가 만들어지지 않습니다.
 - 인터넷이 없는 내부망으로 옮길 때:
   ```bash
   docker save license-server:1.0.0 postgres:16-alpine | gzip > license-server-1.0.0.tar.gz
@@ -44,8 +44,9 @@ docker build -f license-server/Dockerfile -t license-server:1.0.0 .
 ```bash
 cmake -S .. -B ../build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTT_LICENSE_BUILD_TESTS=OFF \
       -DSTT_LICENSE_OPENSSL_STATIC=ON && cmake --build ../build-release --target licensectl
-./gradlew test                 # 단위 39개 (licensectl 필요)
-./gradlew integrationTest      # 통합 17개 (Docker 필요: Testcontainers PostgreSQL)
+./gradlew test                 # 단위 테스트 (licensectl 필요)
+./gradlew integrationTest      # 통합 테스트 (licensectl + Docker 필요: Testcontainers PostgreSQL)
+# 테스트 수 등 최근 실측 결과: ../docs/dev/STATUS.md
 ```
 
 ## 3. 설치

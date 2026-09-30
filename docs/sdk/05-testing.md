@@ -22,15 +22,18 @@ cmake -S . -B build -G Ninja && cmake --build build --target licensectl
 scripts/check.sh            # 결과물 ./build-check, 마지막 줄 "ALL CHECKS PASSED"
 ```
 필요한 것: CMake·Ninja, GCC/Clang, OpenSSL 개발 패키지(`libssl-dev`, 정적 `libcrypto.a` 포함), GoogleTest, JDK 17 이상, Python 3, `pkg-config`.
+- 헤드리스 JDK(`openjdk-*-jdk-headless`)로 충분합니다(AWT 불필요).
+- CMake 3.24 미만에서 `Could NOT find JNI`가 나오면 `JAVA_HOME`을 지정합니다(예: `/usr/lib/jvm/java-17-openjdk-amd64`). 구버전 CMake 모듈은 새 JDK 경로를 모릅니다.
+- 원 저장소에서는 `scripts/cloud-setup.sh`가 Ubuntu에 필요한 도구를 설치합니다.
 
 | 단계 | 확인하는 것 |
 |---|---|
-| 1 | 단위 테스트 49개를 ASan+UBSan으로 실행 |
+| 1 | 코어 단위 테스트(GoogleTest)를 ASan+UBSan으로 실행 |
 | 2 | 골든 벡터를 JDK 표준 Ed25519와 Python json으로 교차 검증 (정규화 호환성) |
 | 3 | `licensectl` 전 명령 E2E, 키 혼동 거부, 원장 기록 |
 | 4 | JNI 하네스를 정적 OpenSSL + 심볼 은닉으로 빌드. `Java_*` 외 export 0개 |
 | 5 | Java ↔ JNI 결합 테스트: `connect(callback, configFile, hostLicense)` 모드별, 이모지 라이선스, 변조·만료, NUL·제어문자 보존 |
-| 6 | `LD_PRELOAD`로 `EVP_DigestVerify`를 가로채는 공격. 보호 빌드는 막고, 대조군 2개(동적 libcrypto, 현재 SDK 구성)는 뚫려야 함 |
+| 6 | `LD_PRELOAD`로 `EVP_DigestVerify`를 가로채는 공격. 보호 빌드는 막고, 대조군 2개(동적 libcrypto, 정적 libcrypto + 심볼 export)는 뚫려야 함 |
 | 7 | SDK 형태 CMake 소비자: 부모 C++14/20, OpenSSL 재사용·사용자 지정 타깃, 키 누락·비밀키 오지정 거부. 공개 헤더 C++11~20 |
 
 WSL에서는 리눅스 파일시스템(예: `~/work`)에 두고 실행합니다. `/mnt/c`에서는 권한 검사 일부를 건너뛰고 경고로 대신합니다.

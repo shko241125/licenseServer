@@ -63,7 +63,7 @@ FetchContent_MakeAvailable(stt_license)
 
 ## 4. 심볼 은닉 — `stt_license_harden_shared_library()`
 
-현재 SDK의 `.so`는 정적 링크한 OpenSSL 심볼까지 모두 export한다(24,033개). 이 상태에서는 `LD_PRELOAD`로 `EVP_DigestVerify`를 바꿔치기해 **변조된 라이선스를 통과시킬 수 있다.** 같은 구성으로 실험해 확인했다(`scripts/check.sh` 6단계 대조군 2).
+OpenSSL을 정적 링크해도 그 심볼을 `.so` 밖으로 export하면, `LD_PRELOAD`로 `EVP_DigestVerify`를 바꿔치기해 **변조된 라이선스를 통과시킬 수 있다**(`scripts/check.sh` 6단계 대조군 2로 실험). 심볼을 기본값대로 export하는 빌드라면 이 함수가 필수다.
 
 ```cmake
 stt_license_harden_shared_library(sonastt_jni_v2)                      # Java_*, JNI_OnLoad, JNI_OnUnload 만 공개
@@ -71,7 +71,7 @@ stt_license_harden_shared_library(sonastt_jni_v2 EXPORTS "sona_api_*") # C API �
 ```
 - 동작: 링커 버전 스크립트(`local: *`)와 `--exclude-libs,ALL`을 적용한다. 버전 스크립트는 빌드 디렉터리에 `<타깃>.exports.map`으로 생성된다.
 - 대상: SHARED/MODULE 라이브러리만. Linux(ELF) 전용이며, 다른 플랫폼에서는 경고만 내고 아무것도 바꾸지 않는다.
-- **적용 전 확인:** 다른 네이티브 라이브러리가 SDK `.so`의 심볼을 직접 쓰고 있다면, 그 패턴을 `EXPORTS`에 넣어야 한다. 현재 SDK는 `libonnxruntime`을 **사용하는** 쪽이라 해당 없을 것으로 보인다.
+- **적용 전 확인:** 다른 네이티브 라이브러리가 SDK `.so`의 심볼을 직접 쓰고 있다면, 그 패턴을 `EXPORTS`에 넣어야 한다. SDK가 다른 라이브러리를 사용하기만 하고 자기 심볼을 제공하지 않는다면 해당 없다.
 - 적용 후 확인:
   ```bash
   nm -D --defined-only libsonastt_jni_v2.so | awk '{print $3}' | grep -v '^Java_'   # 출력이 없어야 함
