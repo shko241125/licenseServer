@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 버전 | 1.1.0 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
+| 버전 | 1.1.1 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
 | 대상 | STT SDK(C++/JNI, `libsonastt_jni_v2.so`) 개발자, STT 서버(Java) 개발자, 현장 설치 엔지니어 |
 | 받는 것 | 이 패키지(소스·문서·검증 도구) + 발급 담당이 주는 **공개키 파일 `public.key`**(Base64 44자) |
 | 받지 않는 것 | 비밀키, 발급 서버. 라이선스 발급은 발급 담당(사내 발급 서버)이 합니다 |
@@ -15,7 +15,7 @@
 
 ```cmake
 # 1) SDK CMakeLists.txt — JNI 라이브러리 타깃 정의 뒤
-set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key CACHE FILEPATH "")
+set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key)   # 운영 공개키 고정 (01-build.md §6)
 add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)
 target_link_libraries(sonastt_jni_v2 PRIVATE stt_license::embedded)
 stt_license_harden_shared_library(sonastt_jni_v2)     # 필수: JNI 진입점 외 심볼 숨김
@@ -93,5 +93,6 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 
 | 버전 | 내용 |
 |---|---|
+| 1.1.1 | 부모가 `STT_LICENSE_PUBLIC_KEY_FILE`·`STT_LICENSE_CRYPTO_TARGET`을 **일반 변수**로 지정하면 서브프로젝트에서 지워지던 문제 수정(CMP0126). 공개키 주입 방법론 문서화(01-build.md §6), 헤드리스 JDK에서 JNI 하네스 빌드 수정 |
 | 1.1.0 | 서명 전용 API(`VerifySignature`, `VerifiedLicense`), 값 검증 포함 `VerifyLicense`, 모드 선택 `Verify(VerifyMode)`, `Utf16ToUtf8`(JNI 문자열), `ParseStandardFields`/`StateAt`. CMake 서브프로젝트 지원, `stt_license_harden_shared_library()`, 공개 헤더 C++11 호환, 비밀키 오지정 차단, FIFO 경로 무기한 대기 수정 |
 | 1.0.0 | 파일 경로 기반 `Manager`(기간·채널 한도·재적재), 발급 CLI `licensectl` |

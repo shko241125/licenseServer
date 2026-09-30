@@ -33,7 +33,7 @@ cmake -S . -B build -G Ninja && cmake --build build
 
 SDK에 넣을 때는 다음과 같이 쓴다. 자세한 내용은 `docs/sdk/01-build.md`를 본다.
 ```cmake
-set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key CACHE FILEPATH "")
+set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key)   # 운영 공개키 고정 (01-build.md §6)
 add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)   # 발행 패키지를 푼 위치
 target_link_libraries(sonastt_jni_v2 PRIVATE stt_license::embedded)
 stt_license_harden_shared_library(sonastt_jni_v2)

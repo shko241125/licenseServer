@@ -10,7 +10,7 @@ STT SDK의 기존 CMake 빌드에 `stt_license`를 서브프로젝트로 넣어 
 
 ```cmake
 # SDK 의 CMakeLists.txt — JNI 라이브러리 타깃을 정의한 뒤
-set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key CACHE FILEPATH "")
+set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key)   # 운영 공개키 고정 (01-build.md §6)
 add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)
 target_link_libraries(sonastt_jni_v2 PRIVATE stt_license::embedded)
 stt_license_harden_shared_library(sonastt_jni_v2)       # 필수 보안 조치 (§4)
@@ -98,15 +98,79 @@ SDK 상황별 설정:
   그 타깃이 include 경로(`INTERFACE_INCLUDE_DIRECTORIES`)와, 정적 링크라면 `dl`·`pthread` 의존성까지 제공해야 한다. OpenSSL 1.1.1 미만이면 `crypto.cpp`의 `#error`로 컴파일이 멈춘다.
 - **3번 경로가 쓰였는데 SDK의 OpenSSL과 다른 경로가 찍혔다면 잘못된 구성이다.** 1번이나 2번 방식으로 바꾼다.
 
-## 6. 공개키 관리
+## 6. 공개키 주입
 
-- 공개키는 비밀이 아니다. SDK 저장소에 커밋해 빌드마다 같은 키를 쓰게 한다(예: `keys/stt_license_public.key`).
-- 발급 담당에게서 받은 키의 **지문(SHA-256)**을 발급 서버 화면의 "공개키 지문"과 대조한다.
-  ```bash
-  base64 -d keys/stt_license_public.key | sha256sum
-  ```
-- 개발·테스트용 키(`licensectl keygen`으로 직접 만든 것)로 빌드한 `.so`를 **배포하지 않는다.** 그 키의 비밀키를 가진 사람은 누구나 라이선스를 만들 수 있다. 배포 빌드는 운영 공개키로만 한다([05-testing.md](05-testing.md) §1).
-- 공개키가 바뀌면(키 유출·분실 대응) SDK를 다시 빌드해 배포해야 한다. 이전 키로 서명된 라이선스는 새 빌드에서 모두 `1004`가 된다.
+### 6.1 원리 — 빌드 시점에 바이너리에 새긴다
+```
+public.key (Base64 44자)
+  └─ CMake 구성 단계: STT_LICENSE_PUBLIC_KEY_FILE 을 읽음
+       ├─ 검사: 파일 존재, 비밀키 접두어면 중단, 44자 Base64 아니면 중단
+       ├─ generated/stt_license_embedded_key.cpp 생성 (키 문자열 상수)
+       └─ 키 파일을 구성 의존성으로 등록 → 파일이 바뀌면 다음 빌드 때 자동 재구성
+  └─ 컴파일·링크: 키가 .so 의 읽기 전용 데이터에 들어감 (문자열 1회)
+실행 시: 파일·환경 변수·설정을 전혀 읽지 않는다
+```
+- **실행 시점 주입(현장 파일, 환경 변수, 설정 키)은 지원하지 않는다. 의도된 설계다.**
+  - 현장에서 공개키를 바꿀 수 있다면, 고객이 자기 키쌍을 만들어 공개키를 바꿔 끼우고 라이선스를 직접 서명할 수 있다.
+  - 공개키는 비밀은 아니지만 **바뀌면 안 되는 값**이다. 그래서 바이너리에 고정한다.
+- 키가 지정되지 않은 채 `stt_license::embedded`를 링크하면 `#error`로 빌드가 실패한다. 키 없는 바이너리는 만들 수 없다.
+
+### 6.2 전달과 수령
+| 전달물 | 경로 | 받는 쪽 확인 |
+|---|---|---|
+| `stt-license-sdk-<버전>.tar.gz` + `.sha256` | 소스 패키지(키와 무관) | `sha256sum -c` |
+| `public.key`(운영 공개키, 한 줄 44자) | **패키지와 별도** | 지문 대조(아래) |
+| 공개키 **지문**(SHA-256) | **또 다른 경로**(메신저가 아닌 사내 문서·구두 확인 등) | — |
+
+```bash
+base64 -d public.key | sha256sum      # 발급 서버 "공개키 지문"(키 화면)과 같아야 한다
+```
+- 공개키는 비밀이 아니므로 유출은 문제가 되지 않는다. 문제는 **바꿔치기**다. 전달 중에 다른 키로 바뀌면, 그 키의 주인이 라이선스를 만들 수 있다. 그래서 키 파일과 지문을 **서로 다른 경로**로 받아 대조한다.
+- 확인한 키는 SDK 저장소에 커밋한다(예: `keys/stt_license_public.key`). 이후 빌드는 모두 이 파일을 쓴다. 누가 언제 키를 바꿨는지 이력이 남는다.
+
+### 6.3 SDK CMake에서 지정하는 방법 (권장)
+```cmake
+# 운영 공개키는 저장소 파일로 고정. 개발 키는 명시적 옵션으로만, 경고와 함께.
+option(SDK_LICENSE_DEV_KEY "개발용 공개키로 빌드 (배포 금지)" OFF)
+if(SDK_LICENSE_DEV_KEY)
+  set(STT_LICENSE_PUBLIC_KEY_FILE ${SDK_LICENSE_DEV_KEY_FILE})
+  message(WARNING "stt_license: DEV public key ${SDK_LICENSE_DEV_KEY_FILE} — 이 빌드는 배포하지 말 것")
+else()
+  set(STT_LICENSE_PUBLIC_KEY_FILE ${CMAKE_SOURCE_DIR}/keys/stt_license_public.key)
+endif()
+add_subdirectory(third_party/stt-license-sdk EXCLUDE_FROM_ALL)
+```
+- **일반 변수**로 지정한다.
+  - 부모의 일반 변수는 캐시보다 우선하므로, 명령줄 `-DSTT_LICENSE_PUBLIC_KEY_FILE=...`로 **덮어쓸 수 없다.** 실수로 개발 키가 운영 빌드에 들어가는 것을 막는다.
+  - 1.1.0 이하에서는 이 방식을 쓰면 키가 사라져 `#error`가 났다. 1.1.1에서 고쳤다.
+- 개발자는 운영 비밀키가 없으므로, 테스트에는 개발 키가 필요하다.
+  - `cmake -DSDK_LICENSE_DEV_KEY=ON -DSDK_LICENSE_DEV_KEY_FILE=$PWD/build/dev-keys/public.key ...`
+  - 개발 키와 라이선스를 만드는 방법: [05-testing.md](05-testing.md) §1
+- 배포 빌드 파이프라인은 `SDK_LICENSE_DEV_KEY=OFF`를 강제하고, §6.5 확인을 통과해야 한다.
+
+지정 방식별 동작(1.1.1, CMake 3.16·3.28·4.0 실측):
+
+| 부모(SDK) CMake에서 | `-D`로 다른 키를 주면 | 평가 |
+|---|---|---|
+| `set(STT_LICENSE_PUBLIC_KEY_FILE <path>)` 일반 변수 | 무시됨(일반 변수 우선) | **권장** — 저장소 파일로 고정 |
+| `set(... CACHE FILEPATH "" FORCE)` | 무시됨 | 가능. 다만 캐시를 매번 덮어써 의도가 덜 드러남 |
+| `set(... CACHE FILEPATH "")` | **`-D` 값이 이김** | 기본값일 뿐 고정이 아님. 개발 키가 섞일 수 있음 |
+| 지정 없이 `cmake -DSTT_LICENSE_PUBLIC_KEY_FILE=<path>` | — | CI 스크립트에서만 쓰는 경우 가능. 어떤 키로 빌드했는지 저장소에 남지 않음 |
+| 환경 변수 | — | CMake가 자동으로 읽지 않음. 필요하면 `-DSTT_LICENSE_PUBLIC_KEY_FILE="$KEY_PATH"`처럼 셸이 풀어서 넘긴다. 운영 빌드에는 권장하지 않음 |
+
+주의: 캐시 변수는 빌드 디렉터리(`CMakeCache.txt`)에 남는다. 한 번 `-D`로 개발 키를 준 빌드 디렉터리는 이후에도 그 키를 쓴다. 운영 빌드는 **새 빌드 디렉터리**에서 한다.
+
+### 6.4 공개키 교체 (키 유출·분실 대응)
+- 새 `public.key`로 저장소 파일을 바꾸고 SDK를 다시 빌드해 배포한다. 키 파일이 바뀌면 다음 빌드에서 자동으로 재구성된다.
+- 이전 키로 서명된 라이선스는 새 빌드에서 모두 `1004`가 된다. 전 고객 라이선스 재발급이 함께 필요하다.
+
+### 6.5 빌드 후 확인 — 어떤 키가 들어갔나
+키는 `.so` 안에 Base64 문자열로 정확히 한 번 들어간다(실측). 배포 전에 운영 키가 들어갔는지 확인한다.
+```bash
+strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat keys/stt_license_public.key)"   # 1 이어야 함
+strings -n 44 libsonastt_jni_v2.so | grep -cxF "$(cat build/dev-keys/public.key)"     # 0 이어야 함 (개발 키 미포함)
+```
+개발 키로 빌드한 `.so`는 **배포하지 않는다.** 그 개발 키의 비밀키를 가진 사람은 누구나 라이선스를 만들 수 있다.
 
 ## 7. 빌드 환경 주의
 
@@ -118,7 +182,7 @@ SDK 상황별 설정:
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| `#error "stt_license: STT_LICENSE_PUBLIC_KEY_FILE is not set..."` | 키 파일 미지정 | `-DSTT_LICENSE_PUBLIC_KEY_FILE=<public.key>` |
+| `#error "stt_license: STT_LICENSE_PUBLIC_KEY_FILE is not set..."` | 키 파일 미지정. 1.1.0 이하에서는 부모가 **일반 변수**로 지정해도 지워졌음 | §6.3 방식으로 지정(1.1.1 이상), 또는 `-DSTT_LICENSE_PUBLIC_KEY_FILE=<public.key>` |
 | `... is a PRIVATE key. Use public.key` | 비밀키를 공개키 자리에 지정함 | `public.key`로 바꾸고, SDK 저장소·빌드 서버에 비밀키 사본이 남았는지 확인해 삭제 |
 | `...: not a Base64 Ed25519 public key (44 chars)` | 키 파일 손상 또는 다른 파일 | 발급 담당이 준 `public.key` 사용 |
 | `STT_LICENSE_CRYPTO_TARGET='x' is not a target visible here` | 타깃을 `add_subdirectory` 뒤에 정의했거나 형제 디렉터리에 정의함 | 타깃을 먼저, 같은 디렉터리나 상위 디렉터리에서 정의 |
