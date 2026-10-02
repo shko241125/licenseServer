@@ -52,6 +52,8 @@ cmake -S .. -B ../build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTT_LICENS
 ## 3. 설치
 
 **리눅스 파일시스템**에서 진행합니다. WSL의 `/mnt/c` 같은 곳은 파일 권한이 적용되지 않아 비밀값이 보호되지 않습니다.
+- 개발·시험용 스택도 **영구 디렉터리**(예: `~/license-dev`)에 둡니다. `/tmp` 같은 임시 디렉터리에 두면 재시작 때 `secrets/`·봉인 키가 지워집니다. 그러면 계정 OTP와 서명 키를 복구할 수 없습니다.
+- 한 호스트에 스택을 여럿 띄울 때는 `docker compose -p <이름>`으로 프로젝트 이름(컨테이너·볼륨 이름)을 나눕니다.
 
 ```bash
 cp -r license-server/deploy /opt/license-server && cd /opt/license-server
