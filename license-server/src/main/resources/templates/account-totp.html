@@ -2,17 +2,30 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('OTP 등록')}"></head>
 <body>
-<main class="center">
-  <h1>OTP 등록 (필수)</h1>
-  <p>OTP 앱(Google Authenticator, Microsoft Authenticator 등)에서 <b>키 직접 입력</b>을 선택하고 아래 값을 넣으세요.</p>
-  <p>계정: <span class="mono" th:text="${me.username}"></span><br>키: <b class="mono" th:text="${secret}"></b><br>
-     <span class="muted">종류: 시간 기반, 6자리, 30초</span></p>
-  <details><summary class="muted">otpauth URI</summary><pre th:text="${uri}"></pre></details>
-  <p class="flash error" th:if="${error}" th:text="${error}"></p>
-  <form th:action="@{/account/totp}" method="post">
-    <label>앱에 표시된 6자리 <input name="code" required autofocus inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
-    <p><button>등록</button></p>
-  </form>
+<main class="auth">
+  <div class="auth-card wide">
+    <div th:replace="~{fragments/layout :: authBrand}"></div>
+    <div class="steps" aria-hidden="true"><span class="on"></span><span class="on"></span><span></span></div>
+    <h1>OTP 등록 <span class="badge badge-warn badge-plain">필수</span></h1>
+    <p class="lead">OTP 앱(Google Authenticator, Microsoft Authenticator 등)에서 <b>키 직접 입력</b>을 선택하고 아래 값을 넣으세요.</p>
+    <dl class="kv">
+      <dt>계정</dt><dd class="mono" th:text="${me.username}"></dd>
+      <dt>종류</dt><dd>시간 기반 · 6자리 · 30초</dd>
+    </dl>
+    <div class="field">
+      <span class="label">키</span>
+      <div class="secret mono copyable" th:text="${secret}">SECRET</div>
+      <span class="hint">클릭하면 전체가 선택됩니다.</span>
+    </div>
+    <details><summary>otpauth URI 보기</summary><pre th:text="${uri}"></pre></details>
+    <form th:action="@{/account/totp}" method="post">
+      <div class="alert alert-bad" role="alert" th:if="${error}"><div th:text="${error}"></div></div>
+      <div class="field"><label for="code">앱에 표시된 6자리</label>
+        <input id="code" class="otp-input" name="code" required autofocus inputmode="numeric" pattern="\d{6}" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000"></div>
+      <button type="submit" class="btn-block">등록</button>
+    </form>
+  </div>
 </main>
 </body>
 </html>

@@ -1,25 +1,49 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('라이선스 검증')}"></head>
-<body>
-<header th:replace="~{fragments/layout :: nav}"></header>
-<main>
-  <h1>라이선스 검증</h1>
-  <p class="muted">고객에게 받은 license.lic 가 이 서버의 키로 서명됐고 변조되지 않았는지, 지금 유효한지 확인합니다.</p>
-  <form th:action="@{/verify}" method="post" enctype="multipart/form-data">
-    <label>파일 <input type="file" name="file" accept=".lic,.json,.txt"></label>
-    <label>또는 내용 붙여넣기 <textarea name="text" maxlength="65536"></textarea></label>
-    <p><button>검증</button></p>
-  </form>
-  <th:block th:if="${result}">
-    <h2>결과: <span th:class="${result['result'] == 'OK'} ? 's-VALID' : 's-EXPIRED'" th:text="${result['result']}"></span>
-      <span th:if="${result['state']}" th:class="'s-' + ${result['state']}" th:text="' · ' + ${result['state']}"></span></h2>
-    <p class="err" th:if="${result['detail']}" th:text="${result['detail']}"></p>
-    <table th:if="${result['result'] == 'OK'}">
-      <tr th:each="k : ${ {'license_id','project_name','license_type','site_id','online_stt','offline_stt','issued_at','not_before','not_after','grace_until','checked_at'} }">
-        <th th:text="${k}"></th><td th:text="${result[k]}"></td></tr>
-    </table>
-  </th:block>
+<body class="app">
+<aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="content">
+  <header class="page-header">
+    <div><h1>라이선스 검증</h1>
+      <p class="desc">고객에게 받은 license.lic 가 이 서버의 키로 서명됐고 변조되지 않았는지, 지금 유효한지 확인합니다.</p></div>
+  </header>
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-head"><h2>검증할 라이선스</h2></div>
+      <form th:action="@{/verify}" method="post" enctype="multipart/form-data">
+        <div class="card-body stack">
+          <div class="field"><label for="file">파일</label><input id="file" type="file" name="file" accept=".lic,.json,.txt"></div>
+          <div class="field"><label for="text">또는 내용 붙여넣기</label>
+            <textarea id="text" name="text" maxlength="65536" class="code-input" placeholder="{ &quot;format_version&quot;: 1, ... }"></textarea>
+            <span class="hint">파일을 고르면 붙여넣은 내용보다 파일이 우선합니다.</span></div>
+        </div>
+        <div class="card-foot"><button type="submit">검증</button></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>결과</h2></div>
+      <div class="card-body">
+        <div class="empty" th:unless="${result}"><div class="title">아직 검증하지 않았습니다</div><div>왼쪽에서 파일이나 내용을 넣고 검증하세요.</div></div>
+        <th:block th:if="${result}">
+          <div class="alert" th:classappend="${result['result'] == 'OK'} ? 'alert-ok' : 'alert-bad'" role="status">
+            <div>
+              <div><span class="result-code" th:text="${result['result']}">OK</span>
+                <span th:if="${result['state']}"> · <span th:replace="~{fragments/layout :: badge(${result['state']})}"></span></span></div>
+              <div class="small" th:text="${result['result'] == 'OK'} ? '서명이 이 서버의 키와 일치하고 내용이 변조되지 않았습니다.' : '검증에 실패했습니다. 파일이 수정됐거나 다른 키로 서명됐을 수 있습니다.'"></div>
+              <div class="small mono" th:if="${result['detail']}" th:text="${result['detail']}"></div>
+            </div>
+          </div>
+          <dl class="kv" th:if="${result['result'] == 'OK'}">
+            <th:block th:each="k : ${ {'license_id','project_name','license_type','site_id','online_stt','offline_stt','issued_at','not_before','not_after','grace_until','checked_at'} }">
+              <dt class="mono small" th:text="${k}"></dt><dd th:classappend="${k == 'license_id'} ? 'mono copyable'" th:text="${result[k]}"></dd>
+            </th:block>
+          </dl>
+        </th:block>
+      </div>
+    </section>
+  </div>
 </main>
 </body>
 </html>

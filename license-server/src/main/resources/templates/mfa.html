@@ -2,14 +2,24 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('2단계 인증')}"></head>
 <body>
-<main class="center">
-  <h1>2단계 인증</h1>
-  <p class="flash error" th:if="${error}" th:text="${error}"></p>
-  <form th:action="@{/mfa}" method="post">
-    <label>OTP 앱의 6자리 코드 <input name="code" required autofocus inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
-    <p><button>확인</button></p>
-  </form>
-  <form th:action="@{/logout}" method="post"><button class="secondary">취소</button></form>
+<main class="auth">
+  <div class="auth-card">
+    <div th:replace="~{fragments/layout :: authBrand}"></div>
+    <div class="steps" aria-hidden="true"><span class="on"></span><span class="on"></span></div>
+    <h1>2단계 인증</h1>
+    <p class="lead">OTP 앱에 표시된 6자리 코드를 입력하세요.</p>
+    <form th:action="@{/mfa}" method="post">
+      <div class="alert alert-bad" role="alert" th:if="${error}"><div th:text="${error}"></div></div>
+      <div class="field"><label for="code" class="sr-only">OTP 앱의 6자리 코드</label>
+        <input id="code" class="otp-input" name="code" required autofocus inputmode="numeric" pattern="\d{6}" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000"></div>
+      <button type="submit" class="btn-block">확인</button>
+    </form>
+    <div class="auth-foot">
+      <span>코드는 30초마다 바뀝니다</span>
+      <form th:action="@{/logout}" method="post"><button type="submit" class="btn-ghost btn-sm">취소</button></form>
+    </div>
+  </div>
 </main>
 </body>
 </html>

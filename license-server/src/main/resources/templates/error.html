@@ -1,5 +1,15 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('오류')}"></head>
-<body><main class="center"><h1 th:text="'오류 ' + ${status}">오류</h1><p>요청을 처리하지 못했습니다.</p><p><a th:href="@{/}">처음으로</a></p></main></body>
+<body>
+<main class="auth">
+  <div class="auth-card">
+    <div th:replace="~{fragments/layout :: authBrand}"></div>
+    <div class="eyebrow muted" th:text="'오류 ' + ${status}">오류</div>
+    <h1>요청을 처리하지 못했습니다</h1>
+    <p class="lead">잠시 후 다시 시도하세요. 계속되면 관리자에게 문의하세요.</p>
+    <a class="btn btn-block" th:href="@{/}">처음으로</a>
+  </div>
+</main>
+</body>
 </html>

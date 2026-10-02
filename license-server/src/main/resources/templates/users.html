@@ -1,49 +1,90 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('계정 관리')}"></head>
-<body>
-<header th:replace="~{fragments/layout :: nav}"></header>
-<main>
-  <h1>계정 관리</h1>
-  <div th:replace="~{fragments/layout :: flash}"></div>
-  <table>
-    <tr><th>사용자</th><th>역할</th><th>상태</th><th>OTP</th><th>잠금</th><th>작업</th></tr>
-    <tr th:each="u : ${users}">
-      <td th:text="${u.username()}"></td><td th:text="${u.role()}"></td>
-      <td><span th:text="${u.enabled()} ? '활성' : '비활성'"></span>
-        <div class="muted" th:if="${u.mustChangePassword() and u.passwordExpiresAt() == null}">임시 비밀번호(만료 없음)</div>
-        <div class="muted" th:if="${u.mustChangePassword() and u.passwordExpiresAt() != null and !u.tempPasswordExpiredAt(now)}"
-             th:text="'임시 비밀번호 ~ ' + ${@fmt.kst(u.passwordExpiresAt())}"></div>
-        <div class="err" th:if="${u.tempPasswordExpiredAt(now)}">임시 비밀번호 만료됨 → 초기화 필요</div></td>
-      <td th:text="${u.totpEnrolled()} ? '등록' : '미등록'"></td>
-      <td th:text="${u.lockedUntil()} ? ${@fmt.kst(u.lockedUntil())} : ''"></td>
-      <td>
-        <details><summary>작업</summary>
-          <form th:action="@{/users/{id}/enabled(id=${u.id()})}" method="post">
-            <input type="hidden" name="enabled" th:value="${!u.enabled()}">
-            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
-            <button class="secondary" th:text="${u.enabled()} ? '비활성화' : '활성화'"></button>
-          </form>
-          <form th:action="@{/users/{id}/reset-password(id=${u.id()})}" method="post">
-            <label>임시 비밀번호 <input type="password" name="tempPassword" required minlength="12" autocomplete="new-password"></label>
-            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
-            <button class="secondary">비밀번호 초기화</button>
-          </form>
-          <form th:action="@{/users/{id}/reset-totp(id=${u.id()})}" method="post">
-            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
-            <button class="secondary">OTP 초기화</button>
-          </form>
-        </details>
-      </td></tr>
-  </table>
-  <h2>계정 추가</h2>
-  <form th:action="@{/users}" method="post">
-    <label>사용자명 (소문자·숫자·._- 3~32자) <input name="username" required pattern="[a-z0-9._-]{3,32}"></label>
-    <label>역할 <select name="role"><option th:each="r : ${roleValues}" th:value="${r}" th:text="${r}"></option></select></label>
-    <label><span th:text="'임시 비밀번호 (12자 이상, 첫 로그인 때 변경, ' + ${tempTtlText} + ' 뒤 만료)'">임시 비밀번호</span> <input type="password" name="tempPassword" required minlength="12" autocomplete="new-password"></label>
-    <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
-    <button>추가</button>
-  </form>
+<body class="app">
+<aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="content">
+  <header class="page-header">
+    <div><h1>계정 관리</h1><p class="desc">개인 계정만 사용합니다. 모든 변경에는 본인 확인(비밀번호 + OTP)이 필요합니다.</p></div>
+  </header>
+  <th:block th:replace="~{fragments/layout :: flash}"></th:block>
+
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><h2>계정</h2><span class="sub" th:text="${#lists.size(users)} + '개'"></span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>사용자</th><th>역할</th><th>상태</th><th>OTP</th><th>잠금</th><th class="num">작업</th></tr></thead>
+          <tbody>
+          <th:block th:each="u : ${users}">
+          <tr>
+            <td class="cell-main mono" th:text="${u.username()}"></td>
+            <td><span th:replace="~{fragments/layout :: badge(${u.role()})}"></span></td>
+            <td><span class="badge" th:classappend="${u.enabled()} ? 'badge-ok'" th:text="${u.enabled()} ? '활성' : '비활성'"></span>
+              <div class="cell-sub" th:if="${u.mustChangePassword() and u.passwordExpiresAt() == null}">임시 비밀번호(만료 없음)</div>
+              <div class="cell-sub" th:if="${u.mustChangePassword() and u.passwordExpiresAt() != null and !u.tempPasswordExpiredAt(now)}"
+                   th:text="'임시 비밀번호 ~ ' + ${@fmt.kst(u.passwordExpiresAt())}"></div>
+              <div class="err" th:if="${u.tempPasswordExpiredAt(now)}">임시 비밀번호 만료됨 → 초기화 필요</div></td>
+            <td><span class="badge" th:classappend="${u.totpEnrolled()} ? 'badge-ok' : 'badge-warn'" th:text="${u.totpEnrolled()} ? '등록' : '미등록'"></span></td>
+            <td class="nowrap"><span class="err" th:if="${u.lockedUntil()}" th:text="${@fmt.kst(u.lockedUntil())} + ' 까지'"></span>
+              <span class="faint" th:unless="${u.lockedUntil()}">—</span></td>
+            <td class="num manage"><details class="manage-toggle"><summary>관리</summary></details></td>
+          </tr>
+          <!-- 바로 위 행의 "관리"를 펼치면 보이는 작업 패널 (CSS :has, 미지원 브라우저는 항상 표시) -->
+          <tr class="manage-row">
+            <td colspan="6">
+              <div class="manage-panel">
+                <form th:action="@{/users/{id}/enabled(id=${u.id()})}" method="post">
+                  <h3 th:text="${u.enabled()} ? '계정 비활성화' : '계정 활성화'">상태 변경</h3>
+                  <p class="hint" th:text="${u.enabled()} ? '로그인을 막습니다. 기록은 남습니다.' : '다시 로그인할 수 있게 합니다.'"></p>
+                  <input type="hidden" name="enabled" th:value="${!u.enabled()}">
+                  <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+                  <button type="submit" class="btn-secondary" th:text="${u.enabled()} ? '비활성화' : '활성화'"></button>
+                </form>
+                <form th:action="@{/users/{id}/reset-password(id=${u.id()})}" method="post">
+                  <h3>비밀번호 초기화</h3>
+                  <label class="field"><span class="label">임시 비밀번호</span>
+                    <input type="password" name="tempPassword" required minlength="12" autocomplete="new-password"></label>
+                  <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+                  <button type="submit" class="btn-secondary">비밀번호 초기화</button>
+                </form>
+                <form th:action="@{/users/{id}/reset-totp(id=${u.id()})}" method="post">
+                  <h3>OTP 초기화</h3>
+                  <p class="hint">다음 로그인 때 OTP를 다시 등록하게 합니다.</p>
+                  <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+                  <button type="submit" class="btn-secondary">OTP 초기화</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          </th:block>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>계정 추가</h2><div class="sub">첫 로그인 때 비밀번호 변경과 OTP 등록이 강제됩니다.</div></div></div>
+      <form th:action="@{/users}" method="post">
+        <div class="card-body stack">
+          <div class="form-grid">
+            <div class="field"><label for="new-username" class="req">사용자명</label>
+              <input id="new-username" name="username" required pattern="[a-z0-9._-]{3,32}" class="mono">
+              <span class="hint">소문자·숫자·._- 3~32자</span></div>
+            <div class="field"><label for="new-role" class="req">역할</label>
+              <select id="new-role" name="role"><option th:each="r : ${roleValues}" th:value="${r}"
+                th:text="${ {'ADMIN':'관리자','ISSUER':'발급자','VIEWER':'조회자'}.get('' + r) } + ' (' + ${r} + ')'"></option></select>
+              <span class="hint">관리자 &gt; 발급자 &gt; 조회자 (상위 역할이 하위 권한 포함)</span></div>
+            <div class="field span-2"><label for="new-temp" class="req">임시 비밀번호</label>
+              <input id="new-temp" type="password" name="tempPassword" required minlength="12" autocomplete="new-password" class="w-md">
+              <span class="hint" th:text="'12자 이상, 첫 로그인 때 변경, ' + ${tempTtlText} + ' 뒤 만료'">12자 이상</span></div>
+          </div>
+          <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+        </div>
+        <div class="card-foot"><button type="submit">추가</button></div>
+      </form>
+    </section>
+  </div>
 </main>
 </body>
 </html>

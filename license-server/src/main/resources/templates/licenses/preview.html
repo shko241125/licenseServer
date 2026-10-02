@@ -1,23 +1,47 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('발급 확인')}"></head>
-<body>
-<header th:replace="~{fragments/layout :: nav}"></header>
-<main>
-  <h1>발급 내용 확인</h1>
-  <p>발급한 라이선스는 <b>취소할 수 없습니다</b>(오프라인 구조). 내용을 확인하세요.</p>
-  <ul class="warn" th:unless="${#lists.isEmpty(warnings)}"><li th:each="w : ${warnings}" th:text="${w}"></li></ul>
-  <table>
-    <tr><th>프로젝트</th><td th:text="${contract.projectName()}"></td></tr>
-    <tr><th>사이트</th><td th:text="${contract.siteId()}"></td></tr>
-    <tr><th>유형</th><td th:text="${contract.licenseType()}"></td></tr>
-    <tr><th>채널</th><td th:text="'온라인 ' + ${contract.onlineStt()} + ' / 오프라인 ' + ${contract.offlineStt()}"></td></tr>
-    <tr><th>시작</th><td th:text="${@fmt.kst(contract.notBefore())} + '  (' + ${@fmt.utc(contract.notBefore())} + ')'"></td></tr>
-    <tr><th>종료</th><td th:text="${@fmt.kst(contract.notAfter())} + '  (' + ${@fmt.utc(contract.notAfter())} + ')'"></td></tr>
-    <tr><th>유예</th><td th:text="${contract.gracePeriodDays()} + '일'"></td></tr>
-  </table>
-  <details><summary>서명될 계약 JSON</summary><pre th:text="${contractJson}"></pre></details>
-  <form th:action="@{/licenses/issue}" th:object="${form}" method="post" class="row">
+<body class="app">
+<aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="content">
+  <header class="page-header">
+    <div><div class="eyebrow">발급 2/2 · 확인</div><h1>발급 내용 확인</h1>
+      <p class="desc">아래 내용으로 서명된 license.lic 가 만들어집니다.</p></div>
+  </header>
+
+  <div class="alert alert-warn" role="note"><div><span class="title">발급한 라이선스는 취소할 수 없습니다.</span> 오프라인 구조라 이미 반입된 파일을 회수할 방법이 없습니다. 내용을 확인하세요.</div></div>
+  <div class="alert alert-warn" role="alert" th:unless="${#lists.isEmpty(warnings)}">
+    <div><span class="title">확인이 필요한 항목</span><ul><li th:each="w : ${warnings}" th:text="${w}"></li></ul></div></div>
+
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-head"><h2>계약 내용</h2></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>프로젝트</dt><dd class="cell-main" th:text="${contract.projectName()}"></dd>
+          <dt>사이트</dt><dd class="mono" th:text="${contract.siteId()}"></dd>
+          <dt>유형</dt><dd><span th:replace="~{fragments/layout :: badge(${contract.licenseType()})}"></span> <span class="faint mono small" th:text="${contract.licenseType()}"></span></dd>
+          <dt>채널</dt><dd th:text="'온라인 ' + ${contract.onlineStt()} + ' / 오프라인 ' + ${contract.offlineStt()}"></dd>
+        </dl>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>유효 기간</h2></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>시작</dt><dd><div th:text="${@fmt.kst(contract.notBefore())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notBefore())}"></div></dd>
+          <dt>종료</dt><dd><div th:text="${@fmt.kst(contract.notAfter())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notAfter())}"></div></dd>
+          <dt>유예</dt><dd th:text="${contract.gracePeriodDays()} + '일'"></dd>
+        </dl>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-body"><details><summary>서명될 계약 JSON</summary><pre th:text="${contractJson}"></pre></details></div>
+  </section>
+
+  <form th:action="@{/licenses/issue}" th:object="${form}" method="post" class="card">
     <input type="hidden" th:field="*{submissionToken}"><input type="hidden" th:field="*{renewedFrom}">
     <input type="hidden" th:field="*{projectName}"><input type="hidden" th:field="*{siteId}">
     <input type="hidden" th:field="*{licenseType}"><input type="hidden" th:field="*{onlineStt}">
@@ -25,9 +49,11 @@
     <input type="hidden" th:field="*{notBeforeTime}"><input type="hidden" th:field="*{notAfterDate}">
     <input type="hidden" th:field="*{notAfterTime}"><input type="hidden" th:field="*{gracePeriodDays}">
     <input type="hidden" th:field="*{warningNotice}">
-    <button th:disabled="${keyState.name() != 'UNSEALED'}">발급</button>
-    <button th:formaction="@{/licenses/edit}" class="secondary" formnovalidate>수정</button>
-    <span class="err" th:if="${keyState.name() != 'UNSEALED'}">서명 키가 봉인 상태라 발급할 수 없습니다.</span>
+    <div class="card-foot">
+      <button type="submit" th:disabled="${keyState.name() != 'UNSEALED'}">발급</button>
+      <button type="submit" th:formaction="@{/licenses/edit}" class="btn-secondary" formnovalidate>수정</button>
+      <span class="err" th:if="${keyState.name() != 'UNSEALED'}">서명 키가 봉인 상태라 발급할 수 없습니다.</span>
+    </div>
   </form>
 </main>
 </body>

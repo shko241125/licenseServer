@@ -1,35 +1,56 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('서명 키')}"></head>
-<body>
-<header th:replace="~{fragments/layout :: nav}"></header>
-<main>
-  <h1>서명 키</h1>
-  <div th:replace="~{fragments/layout :: flash}"></div>
-  <table>
-    <tr><th>상태</th><td><b th:class="'s-' + ${keyState}" th:text="${keyState}"></b>
-      <span class="muted" th:if="${unsealedAt}" th:text="' (해제: ' + ${@fmt.kst(unsealedAt)} + ')'"></span>
-      <div class="err" th:if="${keyError}" th:text="${keyError}"></div>
-      <div class="err" th:if="${lockedUntil}" th:text="'해제 시도 잠금: ' + ${@fmt.kst(lockedUntil)} + ' 까지'"></div></td></tr>
-    <tr><th>공개키</th><td class="mono" th:text="${publicKey} ?: '-'"></td></tr>
-    <tr><th>공개키 지문(SHA-256)</th><td class="mono" th:text="${fingerprint} ?: '-'"></td></tr>
-  </table>
-  <p th:if="${publicKey}"><a class="button secondary" th:href="@{/keys/public.key}">public.key 다운로드 (SDK 빌드용)</a></p>
-  <th:block th:if="${roles.contains('ROLE_ADMIN')}">
-    <th:block th:if="${keyState.name() == 'SEALED'}">
-      <h2>해제 (unseal)</h2>
-      <form th:action="@{/keys/unseal}" method="post">
-        <label>봉인 패스프레이즈 <input type="password" name="passphrase" required autocomplete="off"></label>
-        <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
-        <button>해제</button>
-      </form>
+<body class="app">
+<aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="content">
+  <header class="page-header">
+    <div><h1>서명 키</h1><p class="desc">라이선스 서명에 쓰는 Ed25519 키입니다. 발급은 키가 해제된 동안에만 가능합니다.</p></div>
+    <div class="page-actions" th:if="${publicKey}"><a class="btn btn-secondary" th:href="@{/keys/public.key}">public.key 다운로드 (SDK 빌드용)</a></div>
+  </header>
+  <th:block th:replace="~{fragments/layout :: flash}"></th:block>
+  <div class="stack">
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head"><h2>상태</h2></div>
+        <div class="card-body">
+          <dl class="kv">
+            <dt>상태</dt><dd><span th:replace="~{fragments/layout :: badge(${keyState})}"></span> <span class="faint mono small" th:text="${keyState}"></span></dd>
+            <th:block th:if="${unsealedAt}"><dt>해제 시각</dt><dd th:text="${@fmt.kst(unsealedAt)}"></dd></th:block>
+            <th:block th:if="${lockedUntil}"><dt>해제 시도 잠금</dt><dd class="err" th:text="${@fmt.kst(lockedUntil)} + ' 까지'"></dd></th:block>
+            <th:block th:if="${keyError}"><dt>오류</dt><dd class="err" th:text="${keyError}"></dd></th:block>
+          </dl>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>공개키</h2><div class="sub">SDK에 내장하는 키입니다. 지문을 별도 경로로 전달해 대조하게 하세요.</div></div></div>
+        <div class="card-body">
+          <dl class="kv">
+            <dt>공개키</dt><dd class="mono copyable" th:text="${publicKey} ?: '-'"></dd>
+            <dt>공개키 지문(SHA-256)</dt><dd class="mono copyable small" th:text="${fingerprint} ?: '-'"></dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <th:block th:if="${roles.contains('ROLE_ADMIN')}">
+      <section class="card" th:if="${keyState.name() == 'SEALED'}">
+        <div class="card-head"><div><h2>키 해제 (unseal)</h2><div class="sub">봉인 패스프레이즈로 키를 메모리에 올립니다. 일정 시간 발급이 없으면 자동으로 다시 봉인됩니다.</div></div></div>
+        <form th:action="@{/keys/unseal}" method="post">
+          <div class="card-body stack">
+            <div class="field"><label for="passphrase" class="req">봉인 패스프레이즈</label>
+              <input id="passphrase" type="password" name="passphrase" required autocomplete="off" class="w-md"></div>
+            <fieldset th:replace="~{fragments/layout :: reauth}"></fieldset>
+          </div>
+          <div class="card-foot"><button type="submit">해제</button></div>
+        </form>
+      </section>
+      <section class="card danger-zone" th:if="${keyState.name() == 'UNSEALED'}">
+        <div class="card-head"><div><h2>지금 봉인 (seal)</h2><div class="sub">발급을 마쳤으면 즉시 봉인하세요. 일정 시간 발급이 없으면 자동으로 봉인됩니다.</div></div>
+          <form th:action="@{/keys/seal}" method="post"><button type="submit" class="btn-danger">지금 봉인</button></form></div>
+      </section>
     </th:block>
-    <th:block th:if="${keyState.name() == 'UNSEALED'}">
-      <h2>봉인 (seal)</h2>
-      <p class="muted">발급을 마쳤으면 즉시 봉인하세요. 일정 시간 발급이 없으면 자동으로 봉인됩니다.</p>
-      <form th:action="@{/keys/seal}" method="post"><button class="danger">지금 봉인</button></form>
-    </th:block>
-  </th:block>
+  </div>
 </main>
 </body>
 </html>

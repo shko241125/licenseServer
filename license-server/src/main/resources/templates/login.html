@@ -2,17 +2,24 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('로그인')}"></head>
 <body>
-<main class="center">
-  <h1>라이선스 발급 서버</h1>
-  <p class="flash error" th:if="${param.error}">로그인에 실패했습니다. 계정이 잠겼거나 정보가 올바르지 않을 수 있습니다.</p>
-  <p class="flash info" th:if="${param.logout}">로그아웃했습니다.</p>
-  <p class="flash error" th:if="${param.expired}">세션이 만료되었습니다. 다시 로그인하세요.</p>
-  <p class="flash error" th:if="${param.tempExpired}">임시 비밀번호가 만료되었습니다. 관리자에게 비밀번호 재발급을 요청하세요.</p>
-  <form th:action="@{/login}" method="post">
-    <label>사용자명 <input name="username" required autofocus autocomplete="username"></label>
-    <label>비밀번호 <input type="password" name="password" required autocomplete="current-password"></label>
-    <p><button>로그인</button></p>
-  </form>
+<main class="auth">
+  <div class="auth-card">
+    <div th:replace="~{fragments/layout :: authBrand}"></div>
+    <h1>로그인</h1>
+    <p class="lead">개인 계정으로 로그인합니다. 다음 단계에서 OTP를 확인합니다.</p>
+    <form th:action="@{/login}" method="post">
+      <div class="alert alert-bad" role="alert" th:if="${param.error}"><div>로그인에 실패했습니다. 계정이 잠겼거나 정보가 올바르지 않을 수 있습니다.</div></div>
+      <div class="alert alert-ok" role="status" th:if="${param.logout}"><div>로그아웃했습니다.</div></div>
+      <div class="alert alert-warn" role="alert" th:if="${param.expired}"><div>세션이 만료되었습니다. 다시 로그인하세요.</div></div>
+      <div class="alert alert-bad" role="alert" th:if="${param.tempExpired}"><div>임시 비밀번호가 만료되었습니다. 관리자에게 비밀번호 재발급을 요청하세요.</div></div>
+      <div class="field"><label for="username">사용자명</label>
+        <input id="username" name="username" required autofocus autocomplete="username"></div>
+      <div class="field"><label for="password">비밀번호</label>
+        <input id="password" type="password" name="password" required autocomplete="current-password"></div>
+      <button type="submit" class="btn-block">로그인</button>
+    </form>
+    <div class="auth-foot"><span>계정 잠금·비밀번호 분실은 관리자에게 문의</span></div>
+  </div>
 </main>
 </body>
 </html>

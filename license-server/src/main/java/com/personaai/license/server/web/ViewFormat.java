@@ -1,5 +1,6 @@
 package com.personaai.license.server.web;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -24,5 +25,10 @@ public class ViewFormat {
 
     public String utc(Instant t) {
         return t == null ? "" : F.format(t.atZone(ZoneOffset.UTC)) + "Z";
+    }
+
+    /** now 부터 t 까지 남은 일수(내림). 이미 지났으면 음수. */
+    public long daysUntil(Instant now, Instant t) {
+        return Duration.between(now, t).toDays();
     }
 }

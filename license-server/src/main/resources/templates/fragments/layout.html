@@ -5,33 +5,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title th:text="${title} + ' · 라이선스 발급 서버'">라이선스 발급 서버</title>
   <link rel="stylesheet" th:href="@{/css/app.css}">
+  <link rel="icon" type="image/svg+xml" th:href="@{/css/favicon.svg}">
 </head>
 <body>
-<header th:fragment="nav" class="topbar">
-  <a class="brand" th:href="@{/}">라이선스 발급 서버</a>
-  <nav>
-    <a th:href="@{/}">대시보드</a>
-    <a th:if="${roles.contains('ROLE_ISSUER')}" th:href="@{/licenses/new}">발급</a>
-    <a th:href="@{/licenses}">이력</a>
-    <a th:href="@{/verify}">검증</a>
-    <a th:href="@{/keys}">키</a>
-    <a th:if="${roles.contains('ROLE_ADMIN')}" th:href="@{/audit}">감사 로그</a>
-    <a th:if="${roles.contains('ROLE_ADMIN')}" th:href="@{/users}">계정</a>
+
+<!-- 앱 셸 사이드바: 업무/관리 메뉴, 현재 위치(aria-current), 서명 키 상태, 사용자 -->
+<aside th:fragment="sidebar" class="sidebar"
+       th:with="onIssue=${#strings.startsWith(currentPath, '/licenses/new') or currentPath == '/licenses/preview'
+                         or currentPath == '/licenses/edit' or currentPath == '/licenses/issue'}">
+  <a class="brand" th:href="@{/}">
+    <span class="brand-mark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><circle cx="10" cy="14" r="2"/><path d="M12 14h4M15 14v2"/></svg></span>
+    <span class="brand-name">라이선스 발급 서버<span class="brand-sub">STT 오프라인 · 사내 전용</span></span>
+  </a>
+  <div class="nav-group">업무</div>
+  <nav class="nav" aria-label="업무">
+    <a th:href="@{/}" th:aria-current="${currentPath == '/'} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>대시보드</a>
+    <a th:if="${roles.contains('ROLE_ISSUER')}" th:href="@{/licenses/new}" th:aria-current="${onIssue} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6M9 14h6"/></svg>발급</a>
+    <a th:href="@{/licenses}" th:aria-current="${#strings.startsWith(currentPath, '/licenses') and !onIssue} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>발급 이력</a>
+    <a th:href="@{/verify}" th:aria-current="${currentPath == '/verify'} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>검증</a>
   </nav>
-  <div class="who">
-    <span th:text="${me.username} + ' (' + ${me.role} + ')'">user</span>
-    <a th:href="@{/account/password}">비밀번호</a>
-    <form th:action="@{/logout}" method="post" class="inline"><button class="link">로그아웃</button></form>
+  <div class="nav-group">관리</div>
+  <nav class="nav" aria-label="관리">
+    <a th:href="@{/keys}" th:aria-current="${#strings.startsWith(currentPath, '/keys')} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg>서명 키</a>
+    <a th:if="${roles.contains('ROLE_ADMIN')}" th:href="@{/audit}" th:aria-current="${#strings.startsWith(currentPath, '/audit')} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg>감사 로그</a>
+    <a th:if="${roles.contains('ROLE_ADMIN')}" th:href="@{/users}" th:aria-current="${#strings.startsWith(currentPath, '/users')} ? 'page' : null">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 .8 3 2.9 3 6"/></svg>계정</a>
+  </nav>
+  <div class="side-status">
+    <a th:href="@{/keys}"><span class="label">서명 키</span><span th:replace="~{fragments/layout :: badge(${navKeyState})}"></span></a>
   </div>
-</header>
-<div th:fragment="flash">
-  <p class="flash info" th:if="${info}" th:text="${info}">info</p>
-  <p class="flash error" th:if="${error}" th:text="${error}">error</p>
-</div>
+  <div class="spacer"></div>
+  <div class="side-user">
+    <div class="who" th:text="${me.username}">user</div>
+    <div class="role" th:text="${ {'ADMIN':'관리자','ISSUER':'발급자','VIEWER':'조회자'}.get(me.role + '') } ?: ${me.role}">역할</div>
+    <div class="links">
+      <a th:href="@{/account/password}" th:aria-current="${currentPath == '/account/password'} ? 'page' : null">비밀번호 변경</a>
+      <form th:action="@{/logout}" method="post"><button type="submit">로그아웃</button></form>
+    </div>
+  </div>
+</aside>
+
+<!-- 상태 배지: 한국어 라벨 + 점(색에만 의존하지 않음). 원래 코드는 title 로 남긴다 -->
+<span th:fragment="badge(code)" class="badge"
+      th:with="c=${code == null ? '' : '' + code},
+               k=${ {'ISSUED':'ok','PENDING':'warn','FAILED':'bad','VOID':'',
+                     'UNSEALED':'ok','SEALED':'warn','MISSING':'bad',
+                     'VALID':'ok','GRACE':'warn','NOT_YET_VALID':'warn','EXPIRED':'bad',
+                     'ADMIN':'info','ISSUER':'info','VIEWER':''} },
+               l=${ {'ISSUED':'발급됨','PENDING':'처리 중','FAILED':'실패','VOID':'무효',
+                     'UNSEALED':'해제됨','SEALED':'봉인됨','MISSING':'키 없음',
+                     'VALID':'유효','GRACE':'유예 기간','NOT_YET_VALID':'시작 전','EXPIRED':'만료',
+                     'ADMIN':'관리자','ISSUER':'발급자','VIEWER':'조회자',
+                     'production':'운영','trial':'시험','poc':'PoC'} }"
+      th:classappend="${k.get(c) != null and k.get(c) != ''} ? 'badge-' + ${k.get(c)}"
+      th:title="${c}" th:text="${l.get(c)} ?: ${c}">상태</span>
+
+<!-- 처리 결과 알림 -->
+<th:block th:fragment="flash">
+  <div class="alert alert-ok" role="status" th:if="${info}"><div th:text="${info}">info</div></div>
+  <div class="alert alert-bad" role="alert" th:if="${error}"><div th:text="${error}">error</div></div>
+</th:block>
+
+<!-- 민감 작업 재인증 (필드 이름 password / totp 는 서버 계약) -->
 <fieldset th:fragment="reauth" class="reauth">
   <legend>본인 확인</legend>
-  <label>비밀번호 <input type="password" name="password" required autocomplete="current-password"></label>
-  <label>OTP <input name="totp" required inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
+  <div class="reauth-fields">
+    <label>비밀번호 <input type="password" name="password" required autocomplete="current-password"></label>
+    <label>OTP 6자리 <input name="totp" required inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code"></label>
+  </div>
 </fieldset>
+
+<!-- 인증 화면 머리 -->
+<div th:fragment="authBrand" class="auth-brand">
+  <span class="brand-mark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><circle cx="10" cy="14" r="2"/><path d="M12 14h4M15 14v2"/></svg></span>
+  <div><div class="name">라이선스 발급 서버</div><div class="sub">STT 오프라인 라이선스 · 사내 전용</div></div>
+</div>
 </body>
 </html>

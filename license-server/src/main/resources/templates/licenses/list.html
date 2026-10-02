@@ -1,31 +1,51 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head th:replace="~{fragments/layout :: head('발급 이력')}"></head>
-<body>
-<header th:replace="~{fragments/layout :: nav}"></header>
-<main>
-  <h1>발급 이력</h1>
-  <form th:action="@{/licenses}" method="get" class="row">
-    <input name="q" th:value="${q}" placeholder="프로젝트·사이트·라이선스 ID" class="w-md">
-    <select name="status" class="w-sm">
-      <option value="">전체 상태</option>
-      <option th:each="s : ${ {'ISSUED','PENDING','FAILED','VOID'} }" th:value="${s}" th:text="${s}" th:selected="${s == status}"></option>
-    </select>
-    <button>검색</button>
-  </form>
-  <table>
-    <tr><th>생성(KST)</th><th>상태</th><th>유형</th><th>사이트</th><th>프로젝트</th><th>채널(on/off)</th><th>종료(KST)</th><th>발급자</th></tr>
-    <tr th:each="l, it : ${items}" th:if="${it.index < pageSize}">
-      <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${@fmt.kst(l.createdAt())}"></a></td>
-      <td th:class="'s-' + ${l.status()}" th:text="${l.status()}"></td><td th:text="${l.licenseType()}"></td>
-      <td th:text="${l.siteId()}"></td><td th:text="${l.projectName()}"></td>
-      <td th:text="${l.onlineStt()} + ' / ' + ${l.offlineStt()}"></td><td th:text="${@fmt.kst(l.notAfter())}"></td>
-      <td th:text="${l.issuedByName()}"></td></tr>
-  </table>
-  <p class="row">
-    <a th:if="${page > 0}" th:href="@{/licenses(q=${q},status=${status},page=${page - 1})}">← 이전</a>
-    <a th:if="${#lists.size(items) > pageSize}" th:href="@{/licenses(q=${q},status=${status},page=${page + 1})}">다음 →</a>
-  </p>
+<body class="app">
+<aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="content">
+  <header class="page-header">
+    <div><h1>발급 이력</h1><p class="desc">발급한 모든 라이선스와 처리 상태입니다.</p></div>
+    <div class="page-actions" th:if="${roles.contains('ROLE_ISSUER')}"><a class="btn" th:href="@{/licenses/new}">새 라이선스 발급</a></div>
+  </header>
+  <section class="card">
+    <form th:action="@{/licenses}" method="get" class="toolbar" role="search">
+      <label class="sr-only" for="q">검색어</label>
+      <input id="q" name="q" th:value="${q}" placeholder="프로젝트·사이트·라이선스 ID" class="w-md">
+      <label class="sr-only" for="status">상태</label>
+      <select id="status" name="status" class="w-sm">
+        <option value="">전체 상태</option>
+        <option th:each="s : ${ {'ISSUED','PENDING','FAILED','VOID'} }" th:value="${s}"
+                th:text="${ {'ISSUED':'발급됨','PENDING':'처리 중','FAILED':'실패','VOID':'무효'}.get(s) } + ' (' + ${s} + ')'" th:selected="${s == status}"></option>
+      </select>
+      <button type="submit">검색</button>
+      <a class="btn btn-ghost" th:if="${q != null and q != '' or status != null and status != ''}" th:href="@{/licenses}">초기화</a>
+    </form>
+    <div class="empty" th:if="${#lists.isEmpty(items)}"><div class="title">조건에 맞는 라이선스가 없습니다</div><div>검색어나 상태를 바꿔 보세요.</div></div>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(items)}">
+      <table class="table">
+        <thead><tr><th>생성(KST)</th><th>상태</th><th>프로젝트 / 사이트</th><th>유형</th><th class="num">온라인</th><th class="num">오프라인</th><th>종료(KST)</th><th>발급자</th></tr></thead>
+        <tbody>
+        <tr th:each="l, it : ${items}" th:if="${it.index < pageSize}">
+          <td class="nowrap"><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${@fmt.kst(l.createdAt())}"></a></td>
+          <td><span th:replace="~{fragments/layout :: badge(${l.status()})}"></span></td>
+          <td><a class="cell-main" th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a>
+            <div class="cell-sub mono" th:text="${l.siteId()}"></div></td>
+          <td><span th:replace="~{fragments/layout :: badge(${l.licenseType()})}"></span></td>
+          <td class="num" th:text="${l.onlineStt()}"></td><td class="num" th:text="${l.offlineStt()}"></td>
+          <td class="nowrap" th:text="${@fmt.kst(l.notAfter())}"></td>
+          <td th:text="${l.issuedByName()}"></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pager" th:if="${page > 0 or #lists.size(items) > pageSize}">
+      <span th:text="${page + 1} + '쪽'"></span>
+      <span class="actions">
+        <a class="btn btn-secondary btn-sm" th:if="${page > 0}" th:href="@{/licenses(q=${q},status=${status},page=${page - 1})}">← 이전</a>
+        <a class="btn btn-secondary btn-sm" th:if="${#lists.size(items) > pageSize}" th:href="@{/licenses(q=${q},status=${status},page=${page + 1})}">다음 →</a>
+      </span>
+    </div>
+  </section>
 </main>
 </body>
 </html>
