@@ -12,7 +12,7 @@
 | `licensectl` | 완료 | keygen / issue / verify / sign / pubkey |
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증 |
 | SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~06, `scripts/make-sdk-release.sh`(허용 목록) |
-| 발급 서버 v1.1 | 완료 | 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포 |
+| 발급 서버 v1.2 | 완료 | 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정 |
 | 원격 작업 기반 | 완료(클라우드 실측 전) | `CLAUDE.md`, 이 파일, `DECISIONS.md`, `scripts/cloud-setup.sh` |
 | SDK·STT 서버 실제 적용 | **미착수(다른 저장소)** | 계획: `docs/sdk/02-integration.md`, `03-stt-server.md`, 수용 기준 `05-testing.md` §3 |
 
@@ -26,6 +26,7 @@
 | 〃 | 〃 (`--network host`, `TESTCONTAINERS_HOST_OVERRIDE=localhost`) | `./gradlew integrationTest` | 20개 통과 |
 | 〃 | Ubuntu 20.04 컨테이너(CMake 3.16, 헤드리스 JDK 17) | JNI 하네스 빌드 | 성공(`JAVA_HOME` 지정 필요) |
 | 〃 | 로컬 WSL | `scripts/make-sdk-release.sh --worktree --verify` (1.1.2) | 풀어낸 SDK 패키지만으로 `check.sh` 통과. 키 경로 회귀 시험 4종(`normalvar`, `pinned+D`, `relative-D`, `relative-normal`) 포함 |
+| 2026-10-02 | 분리된 미리보기 스택(웹 이미지만 교체, 같은 DB) | 발급 서버 UI 전후 비교 | 화면 37장씩 전 흐름 수행, 콘솔 오류 1→0, 가로 넘침 0(1440·390px), `gradlew test` 39·`integrationTest` 20 통과, 이미지 빌드 성공 |
 | 〃 | Ubuntu 20.04·24.04 컨테이너, 로컬 | 공개키 주입 방식 행렬 9종(CMake 3.16·3.28·4.0, 라이브러리 디렉터리에 함정 키 배치) | 세 버전 동일: 절대·상대 `-D` → 지정 키, 일반 변수(+`-D`) → 지정 키 고정, 일반 변수 상대 경로 → 거부, CACHE+`-D` → `-D` 키, FORCE → 고정, 환경 변수 브리지 → 지정 키. 함정 키 내장 0건 |
 
 ## 3. 다음 작업 (우선순위)
@@ -38,7 +39,10 @@
 6. **[완료 2026-10-01]** 로컬 PC의 Google Drive 미러 동기화가 만든 옛 사본 6개를 삭제했다(git 이력 일치 확인 후).
    - 재발 방지: 로컬 작업 폴더의 git 데이터를 동기화 폴더 밖으로 분리했다(D31).
    - 클라우드 세션과는 무관하다.
-7. **[발급 서버]** 남은 일: 백업 암호화, 의존성·이미지 취약점 스캔, 감사 로그 보존 정책, 브라우저 E2E 자동화
+7. **[완료 2026-10-02]** 로컬 개발 스택을 영구 위치에 새로 구성했다(프로젝트 `license-dev`, 포트 8443, 새 UI 이미지).
+   - 이전 스택(`license-server`)은 배포 디렉터리 유실로 기동 불가 상태 그대로 둔다(정리는 사용자 판단).
+   - 기존 계정·서명 키는 복구할 수 없다.
+8. **[발급 서버]** 남은 일: 백업 암호화, 의존성·이미지 취약점 스캔, 감사 로그 보존 정책, 브라우저 E2E 자동화
 
 ## 4. 미결 사항
 
