@@ -42,6 +42,7 @@
 | 〃 | 〃 | 퍼저 `fuzz_parse` | 121초 695,431회, 충돌 0(사용자 정의 항목 시드 포함) |
 | 〃 | 〃 | `scripts/make-sdk-release.sh --worktree --verify` (2.0.0, D38 반영) | 풀어낸 SDK 패키지(42개 파일)만으로 `check.sh` 통과: C++ 단위 53, 사용자 정의 항목 E2E, JNI 결합 51항목, CMake 소비자 10구성 |
 | 2026-10-12 | 로컬 WSL | 요구 예시 JSON 상호 운용성 검토 | 계약 입력으로 발급·검증 통과(`license_id` 자동). **최종 파일에 `license_id`가 없으면 `full`·Manager `1005`**. 외부 서명(Python 정규화 + OpenSSL 3) → 코어 통과, 코어 발급 → JDK·Node 검증 통과. 이전 SDK(1.1.2): `full` `1005`, `signature` 통과·`offline_stt` 없음. 영구 값: KST 변환 시 Python `OverflowError`(서버 Java는 영향 없음). 실수 `1.0` → `1003`, `\uXXXX` 이스케이프 바이트 서명 → `1004` |
+| 2026-10-12 | 로컬 WSL | **SDK 2.0.0 정식 발행** `make-sdk-release.sh --ref sdk-v2.0.0 --verify` | `stt-license-sdk-2.0.0.tar.gz` 43개 파일, 원 커밋 `6cf8475`, SHA-256 `3f9b2b90c81593050f4fd422daf7ca61098ab705f5ea1716972bef4717adc9c5`. 패키지만으로 `check.sh` 통과(C++ 53, JNI 51항목), 재빌드 바이트 동일, 금지 파일 0 |
 
 ## 3. 다음 작업 (우선순위)
 
