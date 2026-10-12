@@ -24,7 +24,7 @@
     <div class="empty" th:if="${#lists.isEmpty(items)}"><div class="title">조건에 맞는 라이선스가 없습니다</div><div>검색어나 상태를 바꿔 보세요.</div></div>
     <div class="table-wrap" th:unless="${#lists.isEmpty(items)}">
       <table class="table">
-        <thead><tr><th>생성(KST)</th><th>상태</th><th>프로젝트 / 사이트</th><th>유형</th><th class="num">온라인</th><th class="num">오프라인</th><th>종료(KST)</th><th>발급자</th></tr></thead>
+        <thead><tr><th>생성(KST)</th><th>상태</th><th>프로젝트 / 사이트</th><th>유형</th><th>채널</th><th>종료(KST)</th><th>발급자</th></tr></thead>
         <tbody>
         <tr th:each="l, it : ${items}" th:if="${it.index < pageSize}">
           <td class="nowrap"><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${@fmt.kst(l.createdAt())}"></a></td>
@@ -32,8 +32,8 @@
           <td><a class="cell-main" th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a>
             <div class="cell-sub mono" th:text="${l.siteId()}"></div></td>
           <td><span th:replace="~{fragments/layout :: badge(${l.licenseType()})}"></span></td>
-          <td class="num" th:text="${l.onlineStt()}"></td><td class="num" th:text="${l.offlineStt()}"></td>
-          <td class="nowrap" th:text="${@fmt.kst(l.notAfter())}"></td>
+          <td><span th:replace="~{fragments/layout :: recordChannels(${l})}"></span></td>
+          <td class="nowrap" th:text="${@fmt.end(l.notAfter())}"></td>
           <td th:text="${l.issuedByName()}"></td></tr>
         </tbody>
       </table>

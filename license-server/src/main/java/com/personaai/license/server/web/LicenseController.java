@@ -74,9 +74,11 @@ public class LicenseController {
     public String newForm(@RequestParam(required = false) String from, Model model) {
         IssueForm f;
         if (from != null && from.matches("[0-9a-f]{32}")) {
-            f = licenses.findByLicenseId(from).map(r -> IssueForm.copyOf(r, props.zone())).orElseGet(IssueForm::new);
+            LocalDate today = LocalDate.now(clock.withZone(props.zone()));
+            f = licenses.findByLicenseId(from).map(r -> IssueForm.copyOf(r, props.zone(), today))
+                    .orElseGet(() -> new IssueForm().withDefaultEngines());
         } else {
-            f = new IssueForm();
+            f = new IssueForm().withDefaultEngines();
             LocalDate today = LocalDate.now(clock.withZone(props.zone()));
             f.setNotBeforeDate(today.toString());
             f.setNotAfterDate(today.plusYears(1).minusDays(1).toString());
@@ -86,12 +88,13 @@ public class LicenseController {
     }
 
     private String form(IssueForm f, Model model, Map<String, String> errors, String message) {
-        model.addAttribute("form", f);
+        model.addAttribute("form", f.padChannels());
         model.addAttribute("errors", errors);
         model.addAttribute("message", message);
         model.addAttribute("types", ContractValidator.TYPES.stream().sorted().toList());
         model.addAttribute("projects", licenses.distinctValues("project_name"));
         model.addAttribute("sites", licenses.distinctValues("site_id"));
+        model.addAttribute("solutions", licenses.distinctValues("solution"));
         model.addAttribute("keyState", vault.state());
         return "licenses/form";
     }

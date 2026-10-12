@@ -21,20 +21,23 @@ class LicensectlTest {
     final Licensectl real = new Licensectl(TestFixture.LICENSECTL, Duration.ofSeconds(10));
 
     static final String CONTRACT = """
-            {"format_version":1,"license_id":"0123456789abcdef0123456789abcdef","project_name":"P","license_type":"poc",
-             "site_id":"S","allowed_channels":{"online_stt":0,"offline_stt":3},
+            {"license_ver":1,"license_id":"0123456789abcdef0123456789abcdef","project_name":"P","license_type":"poc",
+             "solution":"sonastt-universal","site_id":"S",
+             "allowed_channels":{"total":3,"offline":{"sonastt":3},"online":{}},
              "validity":{"issued_at":"2026-09-29T00:00:00Z","not_before":"2026-09-29T00:00:00Z",
-                         "not_after":"2099-01-01T00:00:00Z","grace_period_days":0},"warning_notice":"w"}""";
+                         "not_after":"2099-01-01T00:00:00Z"},"warning_notice":"w"}""";
 
     @Test
     void signVerifyPubkey() {
         byte[] key = F.privateKeyLine.getBytes(StandardCharsets.US_ASCII);
         String lic = real.sign(key, CONTRACT.getBytes(StandardCharsets.UTF_8));
-        assertThat(lic).startsWith("{\n  \"format_version\": 1,").contains("\"signature\": \"");
+        assertThat(lic).startsWith("{\n  \"license_ver\": 1,").contains("\"signature\": \"");
         Map<String, Object> v = real.verify(F.publicKey, lic.getBytes(StandardCharsets.UTF_8));
-        assertThat(v).containsEntry("result", "OK").containsEntry("state", "VALID").containsEntry("offline_stt", 3);
+        assertThat(v).containsEntry("result", "OK").containsEntry("state", "VALID").containsEntry("total", 3)
+                .containsEntry("license_ver", 1).containsEntry("solution", "sonastt-universal")
+                .containsEntry("channels", Map.of("offline", Map.of("sonastt", 3), "online", Map.of()));
         assertThat(real.publicKeyOf(key)).isEqualTo(F.publicKey);
-        Map<String, Object> bad = real.verify(F.publicKey, lic.replace("\"offline_stt\": 3", "\"offline_stt\": 30").getBytes());
+        Map<String, Object> bad = real.verify(F.publicKey, lic.replace("\"total\": 3", "\"total\": 30").getBytes());
         assertThat(bad).containsEntry("result", "LICENSE_BAD_SIGNATURE");
     }
 

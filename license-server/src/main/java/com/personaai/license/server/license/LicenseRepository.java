@@ -5,18 +5,26 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
+
 @Repository
 public class LicenseRepository {
     // 텍스트 블록은 줄 끝 공백을 지우므로 뒤에 이어 붙일 SQL 조각은 일반 문자열로 둔다.
     private static final String SELECT =
             "SELECT l.*, u.username AS issued_by_name FROM license l JOIN app_user u ON u.id = l.issued_by ";
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final TypeReference<LinkedHashMap<String, Map<String, Integer>>> CHANNELS = new TypeReference<>() {};
 
     private final JdbcClient jdbc;
 
@@ -33,12 +41,21 @@ public class LicenseRepository {
         return i == null ? null : OffsetDateTime.ofInstant(i, ZoneOffset.UTC);
     }
 
+    /** channels_json → {항목: {세부 항목: 상한}} (입력 순서 유지). 이전 형식 행은 null → 빈 맵. */
+    static Map<String, Map<String, Integer>> channels(String json) {
+        if (json == null) return new LinkedHashMap<>();
+        return JSON.readValue(json, CHANNELS);
+    }
+
     static LicenseRecord map(ResultSet rs, int i) throws SQLException {
         return new LicenseRecord(rs.getLong("id"), rs.getString("license_id"),
                 rs.getObject("submission_token", UUID.class), LicenseRecord.Status.valueOf(rs.getString("status")),
                 rs.getString("project_name"), rs.getString("license_type"), rs.getString("site_id"),
-                rs.getInt("online_stt"), rs.getInt("offline_stt"), ts(rs, "issued_at"), ts(rs, "not_before"),
-                ts(rs, "not_after"), rs.getInt("grace_period_days"), rs.getString("warning_notice"),
+                ts(rs, "issued_at"), ts(rs, "not_before"), ts(rs, "not_after"), rs.getString("warning_notice"),
+                rs.getObject("license_ver", Integer.class), rs.getString("solution"),
+                rs.getObject("channels_total", Integer.class), channels(rs.getString("channels_json")),
+                rs.getObject("online_stt", Integer.class), rs.getObject("offline_stt", Integer.class),
+                rs.getObject("grace_period_days", Integer.class),
                 rs.getString("license_text"), rs.getString("license_sha256"), rs.getString("public_key_fp"),
                 rs.getString("renewed_from"), rs.getLong("issued_by"), rs.getString("issued_by_name"),
                 rs.getString("error"), rs.getString("void_reason"), ts(rs, "voided_at"), ts(rs, "created_at"));
@@ -48,13 +65,14 @@ public class LicenseRepository {
     public boolean insertPending(String licenseId, UUID token, Contract c, String publicKeyFp, long issuedBy) {
         return jdbc.sql("""
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
-                  online_stt, offline_stt, issued_at, not_before, not_after, grace_period_days, warning_notice,
-                  public_key_fp, renewed_from, issued_by)
-                VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  license_ver, solution, channels_total, channels_json,
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, renewed_from, issued_by)
+                VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (submission_token) DO NOTHING""")
-                .params(licenseId, token, c.projectName(), c.licenseType(), c.siteId(), c.onlineStt(),
-                        c.offlineStt(), odt(c.issuedAt()), odt(c.notBefore()), odt(c.notAfter()),
-                        c.gracePeriodDays(), c.warningNotice(), publicKeyFp, c.renewedFrom(), issuedBy)
+                .params(licenseId, token, c.projectName(), c.licenseType(), c.siteId(),
+                        Contract.LICENSE_VER, c.solution(), c.total(), c.channelsJson(),
+                        odt(c.issuedAt()), odt(c.notBefore()), odt(c.notAfter()),
+                        c.warningNotice(), publicKeyFp, c.renewedFrom(), issuedBy)
                 .update() == 1;
     }
 
@@ -100,7 +118,10 @@ public class LicenseRepository {
     }
 
     public List<String> distinctValues(String column) {
-        if (!column.equals("project_name") && !column.equals("site_id")) throw new IllegalArgumentException(column);
-        return jdbc.sql("SELECT DISTINCT " + column + " FROM license ORDER BY 1 LIMIT 500").query(String.class).list();
+        if (!column.equals("project_name") && !column.equals("site_id") && !column.equals("solution")) {
+            throw new IllegalArgumentException(column);
+        }
+        return jdbc.sql("SELECT DISTINCT " + column + " FROM license WHERE " + column + " IS NOT NULL ORDER BY 1 LIMIT 500")
+                .query(String.class).list();
     }
 }

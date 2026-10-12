@@ -16,7 +16,7 @@
   <div class="alert alert-warn" role="alert" th:if="${keyState.name() != 'UNSEALED'}">
     <div>서명 키가 <span th:replace="~{fragments/layout :: badge(${keyState})}"></span> 상태입니다. 입력·미리보기는 가능하지만 발급하려면 관리자가 키를 해제해야 합니다.</div></div>
   <div class="alert" th:if="${!#strings.isEmpty(form.renewedFrom)}">
-    <div>원본 라이선스 <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a>를 기준으로 채웠습니다. 기간은 원본 종료 다음 날부터 1년입니다.</div></div>
+    <div>원본 라이선스 <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a>를 기준으로 채웠습니다. 시작일은 시험·PoC 면 원본 종료 다음 날(종료는 그로부터 1년), 영구(운영) 원본이면 오늘입니다.</div></div>
 
   <form th:action="@{/licenses/preview}" th:object="${form}" method="post" class="card">
     <input type="hidden" th:field="*{submissionToken}">
@@ -35,41 +35,51 @@
         <div class="field"><label for="licenseType" class="req">유형</label>
           <select th:field="*{licenseType}" th:aria-invalid="${errors['licenseType'] != null} ? 'true' : null">
             <option th:each="t : ${types}" th:value="${t}" th:text="${t}"></option></select>
-          <span class="hint">production 운영 · trial 시험 · poc 개념 검증</span>
+          <span class="hint">production 운영(영구) · trial 시험 · poc 개념 검증</span>
           <span class="field-error" th:text="${errors['licenseType']}"></span></div>
+        <div class="field"><label for="solution" class="req">솔루션</label>
+          <input th:field="*{solution}" list="solutions" maxlength="128" required class="mono" th:aria-invalid="${errors['solution'] != null} ? 'true' : null">
+          <span class="hint">예: sonastt-universal. 기존 값이 자동 완성됩니다.</span>
+          <span class="field-error" th:text="${errors['solution']}"></span></div>
       </div>
     </section>
 
     <section class="form-section">
-      <div class="section-head"><h2>채널 수</h2><p>동시에 처리할 수 있는 세션 수입니다. 둘 중 하나는 1 이상이어야 합니다.</p></div>
-      <div class="form-grid">
-        <div class="field"><label for="onlineStt" class="req">온라인(스트리밍)</label>
-          <input type="number" th:field="*{onlineStt}" min="0" max="100000" required class="w-num" th:aria-invalid="${errors['onlineStt'] != null} ? 'true' : null">
-          <span class="field-error" th:text="${errors['onlineStt']}"></span></div>
-        <div class="field"><label for="offlineStt" class="req">오프라인(파일)</label>
-          <input type="number" th:field="*{offlineStt}" min="0" max="100000" required class="w-num" th:aria-invalid="${errors['offlineStt'] != null} ? 'true' : null">
-          <span class="hint">sonastt-offline + whisper-offline 동시 사용 합계</span>
-          <span class="field-error" th:text="${errors['offlineStt']}"></span></div>
+      <div class="section-head"><h2>채널</h2>
+        <p><b>total</b> = 모든 항목·세부 항목의 동시 세션 상한. 그 밖의 항목은 이름을 자유롭게 정합니다(예: offline, online). 세부 항목 값은 그 세부 항목의 상한(≤ total)입니다. 이름이 비었거나 상한이 0 인 행은 넣지 않습니다.</p></div>
+      <div class="stack">
+        <div class="field"><label for="total" class="req">total (전체 동시 세션)</label>
+          <input type="number" th:field="*{total}" min="1" max="100000" required class="w-num" th:aria-invalid="${errors['total'] != null} ? 'true' : null">
+          <span class="field-error" th:text="${errors['total']}"></span></div>
+        <fieldset class="engines" th:aria-invalid="${errors['channels'] != null} ? 'true' : null">
+          <legend>항목별 상한</legend>
+          <div class="engine-head" aria-hidden="true"><span>항목</span><span>세부 항목</span><span>상한</span></div>
+          <div class="engine-row" th:each="row, it : *{channels}">
+            <input th:field="*{channels[__${it.index}__].group}" list="groups" maxlength="64" class="mono" th:aria-label="'채널 ' + ${it.count} + ' 항목'">
+            <input th:field="*{channels[__${it.index}__].name}" list="engines" maxlength="64" class="mono" th:aria-label="'채널 ' + ${it.count} + ' 세부 항목'">
+            <input type="number" th:field="*{channels[__${it.index}__].count}" min="0" max="100000" th:aria-label="'채널 ' + ${it.count} + ' 상한'">
+          </div>
+          <span class="field-error" th:text="${errors['channels']}"></span>
+        </fieldset>
+        <span class="hint">항목·세부 항목 이름은 소문자·숫자·_ 1~64자(<code>total</code> 은 항목 이름으로 쓸 수 없음). 행이 모자라면 채운 뒤 미리보기 → "수정"으로 돌아오면 빈 행이 3개 더 생깁니다.</span>
       </div>
     </section>
 
     <section class="form-section">
-      <div class="section-head"><h2>유효 기간 (KST)</h2><p>파일에는 UTC로 저장됩니다. 미리보기에서 두 시각을 함께 확인할 수 있습니다.</p></div>
+      <div class="section-head"><h2>유효 기간 (KST)</h2>
+        <p>운영(production)은 <b>영구</b>(9999-12-31T23:59:59Z)로 발급되어 종료 입력을 쓰지 않습니다. 시험·PoC 는 종료일이 필요합니다. 유예 기간은 없습니다.</p></div>
       <div class="form-grid">
         <div class="field span-2"><span class="label req">시작</span>
           <div class="inline-fields">
             <input type="date" th:field="*{notBeforeDate}" required aria-label="시작 날짜" th:aria-invalid="${errors['notBefore'] != null} ? 'true' : null">
             <input type="time" step="1" th:field="*{notBeforeTime}" aria-label="시작 시각" th:aria-invalid="${errors['notBefore'] != null} ? 'true' : null"></div>
           <span class="field-error" th:text="${errors['notBefore']}"></span></div>
-        <div class="field span-2"><span class="label req">종료</span>
+        <div class="field span-2"><span class="label">종료 (시험·PoC)</span>
           <div class="inline-fields">
-            <input type="date" th:field="*{notAfterDate}" required aria-label="종료 날짜" th:aria-invalid="${errors['notAfter'] != null} ? 'true' : null">
+            <input type="date" th:field="*{notAfterDate}" aria-label="종료 날짜" th:aria-invalid="${errors['notAfter'] != null} ? 'true' : null">
             <input type="time" step="1" th:field="*{notAfterTime}" aria-label="종료 시각" th:aria-invalid="${errors['notAfter'] != null} ? 'true' : null"></div>
+          <span class="hint">운영은 이 값을 무시하고 영구로 발급합니다.</span>
           <span class="field-error" th:text="${errors['notAfter']}"></span></div>
-        <div class="field"><label for="gracePeriodDays" class="req">유예 기간(일)</label>
-          <input type="number" th:field="*{gracePeriodDays}" min="0" max="90" required class="w-num" th:aria-invalid="${errors['gracePeriodDays'] != null} ? 'true' : null">
-          <span class="hint">0~90일. 종료 후 이 기간 동안 경고와 함께 동작합니다.</span>
-          <span class="field-error" th:text="${errors['gracePeriodDays']}"></span></div>
       </div>
     </section>
 
@@ -88,6 +98,9 @@
   </form>
   <datalist id="projects"><option th:each="v : ${projects}" th:value="${v}"></option></datalist>
   <datalist id="sites"><option th:each="v : ${sites}" th:value="${v}"></option></datalist>
+  <datalist id="solutions"><option value="sonastt-universal"></option><option th:each="v : ${solutions}" th:value="${v}"></option></datalist>
+  <datalist id="groups"><option value="offline"></option><option value="online"></option></datalist>
+  <datalist id="engines"><option value="sonastt"></option><option value="sonaml"></option><option value="sonaasr"></option></datalist>
 </main>
 </body>
 </html>

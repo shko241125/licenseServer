@@ -251,15 +251,21 @@ class WebSecurityIT extends IntegrationTestBase {
             String token = UUID.randomUUID().toString();
             var form = post("/licenses/issue").session(s).with(csrf()).param("submissionToken", token)
                     .param("projectName", "<script>alert(1)</script>").param("siteId", "SITE-A").param("licenseType", "trial")
-                    .param("onlineStt", "2").param("offlineStt", "3").param("notBeforeDate", "2026-01-01")
+                    .param("total", "3").param("channels[0].group", "offline").param("channels[0].name", "sonastt")
+                    .param("channels[0].count", "3")
+                    .param("channels[1].group", "").param("channels[1].name", "").param("channels[1].count", "0")
+                    .param("channels[2].group", "online").param("channels[2].name", "sonaasr").param("channels[2].count", "2")
+                    .param("channels[3].group", "streaming_rt").param("channels[3].name", "sonastt").param("channels[3].count", "1")  // 사용자 정의 항목
+                    .param("notBeforeDate", "2026-01-01")
                     .param("notBeforeTime", "00:00").param("notAfterDate", "2099-12-31").param("notAfterTime", "23:59:59")
-                    .param("gracePeriodDays", "7").param("warningNotice", "notice");
+                    .param("warningNotice", "notice");
             MvcResult issued = mvc.perform(form).andExpect(status().is3xxRedirection()).andReturn();
             String location = issued.getResponse().getRedirectedUrl();
             assertThat(location).matches("/licenses/[0-9a-f]{32}\\?issued");
             String id = location.substring(10, 42);
             mvc.perform(get("/licenses/" + id).session(s)).andExpect(status().isOk())
                     .andExpect(content().string(org.hamcrest.Matchers.containsString("&lt;script&gt;alert(1)&lt;/script&gt;")))
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString(">streaming_rt<")))
                     .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<script>alert"))));
             MvcResult dl = mvc.perform(get("/licenses/" + id + "/download").session(s)).andExpect(status().isOk())
                     .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("SITE-A_" + id + ".lic")))
@@ -267,7 +273,7 @@ class WebSecurityIT extends IntegrationTestBase {
             String lic = dl.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
             mvc.perform(multipart("/verify").file("file", lic.getBytes()).session(s).with(csrf()))
                     .andExpect(content().string(org.hamcrest.Matchers.containsString(">OK<")));
-            mvc.perform(post("/verify").session(s).with(csrf()).param("text", lic.replace("\"offline_stt\": 3", "\"offline_stt\": 30")))
+            mvc.perform(post("/verify").session(s).with(csrf()).param("text", lic.replace("\"total\": 3", "\"total\": 30")))
                     .andExpect(content().string(org.hamcrest.Matchers.containsString("LICENSE_BAD_SIGNATURE")));
             // 같은 폼 재전송 → 같은 건
             assertThat(mvc.perform(form).andReturn().getResponse().getRedirectedUrl()).isEqualTo(location);

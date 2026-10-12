@@ -60,14 +60,14 @@
       <div class="empty" th:if="${#lists.isEmpty(recent)}"><div class="title">발급 이력이 없습니다</div></div>
       <div class="table-wrap" th:unless="${#lists.isEmpty(recent)}">
         <table class="table">
-          <thead><tr><th>생성(KST)</th><th>상태</th><th>프로젝트</th><th>사이트</th><th class="num">온라인</th><th class="num">오프라인</th><th>발급자</th></tr></thead>
+          <thead><tr><th>생성(KST)</th><th>상태</th><th>프로젝트</th><th>사이트</th><th>채널</th><th>발급자</th></tr></thead>
           <tbody>
           <tr th:each="l : ${recent}">
             <td class="nowrap"><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${@fmt.kst(l.createdAt())}"></a></td>
             <td><span th:replace="~{fragments/layout :: badge(${l.status()})}"></span></td>
             <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a></td>
             <td class="mono" th:text="${l.siteId()}"></td>
-            <td class="num" th:text="${l.onlineStt()}"></td><td class="num" th:text="${l.offlineStt()}"></td>
+            <td><span th:replace="~{fragments/layout :: recordChannels(${l})}"></span></td>
             <td th:text="${l.issuedByName()}"></td>
           </tr>
           </tbody>

@@ -21,7 +21,8 @@
           <dt>프로젝트</dt><dd class="cell-main" th:text="${contract.projectName()}"></dd>
           <dt>사이트</dt><dd class="mono" th:text="${contract.siteId()}"></dd>
           <dt>유형</dt><dd><span th:replace="~{fragments/layout :: badge(${contract.licenseType()})}"></span> <span class="faint mono small" th:text="${contract.licenseType()}"></span></dd>
-          <dt>채널</dt><dd th:text="'온라인 ' + ${contract.onlineStt()} + ' / 오프라인 ' + ${contract.offlineStt()}"></dd>
+          <dt>솔루션</dt><dd class="mono" th:text="${contract.solution()}"></dd>
+          <dt>채널</dt><dd><span th:replace="~{fragments/layout :: channels(${contract.total()}, ${contract.channels()})}"></span></dd>
         </dl>
       </div>
     </section>
@@ -30,8 +31,7 @@
       <div class="card-body">
         <dl class="kv">
           <dt>시작</dt><dd><div th:text="${@fmt.kst(contract.notBefore())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notBefore())}"></div></dd>
-          <dt>종료</dt><dd><div th:text="${@fmt.kst(contract.notAfter())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notAfter())}"></div></dd>
-          <dt>유예</dt><dd th:text="${contract.gracePeriodDays()} + '일'"></dd>
+          <dt>종료</dt><dd><div th:text="${@fmt.end(contract.notAfter())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notAfter())}"></div></dd>
         </dl>
       </div>
     </section>
@@ -44,10 +44,12 @@
   <form th:action="@{/licenses/issue}" th:object="${form}" method="post" class="card">
     <input type="hidden" th:field="*{submissionToken}"><input type="hidden" th:field="*{renewedFrom}">
     <input type="hidden" th:field="*{projectName}"><input type="hidden" th:field="*{siteId}">
-    <input type="hidden" th:field="*{licenseType}"><input type="hidden" th:field="*{onlineStt}">
-    <input type="hidden" th:field="*{offlineStt}"><input type="hidden" th:field="*{notBeforeDate}">
+    <input type="hidden" th:field="*{licenseType}"><input type="hidden" th:field="*{solution}">
+    <input type="hidden" th:field="*{total}">
+    <th:block th:each="row, it : *{channels}"><input type="hidden" th:field="*{channels[__${it.index}__].group}"><input type="hidden" th:field="*{channels[__${it.index}__].name}"><input type="hidden" th:field="*{channels[__${it.index}__].count}"></th:block>
+    <input type="hidden" th:field="*{notBeforeDate}">
     <input type="hidden" th:field="*{notBeforeTime}"><input type="hidden" th:field="*{notAfterDate}">
-    <input type="hidden" th:field="*{notAfterTime}"><input type="hidden" th:field="*{gracePeriodDays}">
+    <input type="hidden" th:field="*{notAfterTime}">
     <input type="hidden" th:field="*{warningNotice}">
     <div class="card-foot">
       <button type="submit" th:disabled="${keyState.name() != 'UNSEALED'}">발급</button>

@@ -73,7 +73,8 @@ public class IssueService {
             licenses.markIssued(licenseId, text, Crypto.sha256Hex(text));
             Map<String, Object> detail = new java.util.HashMap<>(Map.of(
                     "project_name", c.projectName(), "site_id", c.siteId(), "license_type", c.licenseType(),
-                    "online_stt", c.onlineStt(), "offline_stt", c.offlineStt(), "not_after", Contract.utc(c.notAfter())));
+                    "license_ver", Contract.LICENSE_VER, "solution", c.solution(), "total", c.total(),
+                    "channels", c.channels(), "not_after", Contract.utc(c.notAfter())));
             if (c.renewedFrom() != null) detail.put("renewed_from", c.renewedFrom()); // 없으면 키를 넣지 않는다("null" 문자열 방지)
             audit.record(by.getUsername(), "ISSUE", licenseId, ip, detail);
         } catch (LicensectlException | IllegalStateException e) {

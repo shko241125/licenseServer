@@ -82,7 +82,15 @@ class IssueFlowIT extends IntegrationTestBase {
                 F.dir.resolve("keys/public.key").toString(), lic.toString()).redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         assertThat(p.waitFor()).as(out).isZero();
-        assertThat(out).contains("SIGNATURE OK").contains("offline_stt=8");
+        assertThat(out).contains("SIGNATURE OK").contains("license_ver    : 1").contains("channels total : 16")
+                .contains("sonastt=8").contains("9999-12-31T23:59:59Z");          // 운영 = 영구
+        assertThat(r.licenseVer()).isEqualTo(1);
+        assertThat(r.permanent()).isTrue();
+        assertThat(r.channels()).containsOnlyKeys("offline", "online");
+        assertThat(r.channels().get("offline")).containsExactly(java.util.Map.entry("sonastt", 8),
+                java.util.Map.entry("sonaml", 4), java.util.Map.entry("sonaasr", 4));   // DB 왕복 후에도 입력 순서
+        assertThat(r.channels().get("online")).containsOnlyKeys("sonastt", "sonaasr");
+        assertThat(r.licenseText()).doesNotContain("grace").doesNotContain("format_version");
 
         // 같은 제출 토큰 재전송 → 새로 발급하지 않고 같은 건 반환
         assertThat(issue.issue(f, admin(), "127.0.0.1").licenseId()).isEqualTo(r.licenseId());

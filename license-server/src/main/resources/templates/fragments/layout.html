@@ -66,6 +66,21 @@
       th:classappend="${k.get(c) != null and k.get(c) != ''} ? 'badge-' + ${k.get(c)}"
       th:title="${c}" th:text="${l.get(c)} ?: ${c}">상태</span>
 
+<!-- 채널 표시(license_ver 1): total + 항목(이름 자유)별 세부 항목 상한. th:each 가 th:unless 보다 먼저 실행된다 -->
+<span th:fragment="channels(total, groups)" class="channels">
+  <span class="ch-total" th:text="'total ' + ${total}">total</span>
+  <span class="ch-group" th:each="g : ${groups}" th:unless="${#maps.isEmpty(g.value)}"><span class="ch-label mono" th:text="${g.key}">항목</span>
+    <span class="ch-eng" th:each="e : ${g.value}" th:text="${e.key} + ' ' + ${e.value}">세부 항목</span></span>
+</span>
+
+<!-- 장부 행의 채널: 이전 형식(format_version) 행은 옛 값 그대로 -->
+<span th:fragment="recordChannels(r)">
+  <th:block th:if="${r.legacy()}"><span class="badge badge-plain" title="format_version 1">이전 형식</span>
+    <span class="small" th:text="'온라인 ' + ${r.onlineStt()} + ' / 오프라인 ' + ${r.offlineStt()}"></span></th:block>
+  <!-- th:replace 는 th:if/unless 보다 먼저 실행되므로 조건은 감싸는 블록에 둔다 -->
+  <th:block th:unless="${r.legacy()}"><span th:replace="~{fragments/layout :: channels(${r.channelsTotal()}, ${r.channels()})}"></span></th:block>
+</span>
+
 <!-- 처리 결과 알림 -->
 <th:block th:fragment="flash">
   <div class="alert alert-ok" role="status" th:if="${info}"><div th:text="${info}">info</div></div>

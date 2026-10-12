@@ -17,6 +17,44 @@ import com.personaai.license.server.IntegrationTestBase;
 class DatabaseGuardIT extends IntegrationTestBase {
     @Autowired JdbcClient jdbc;
     @Autowired AuditService audit;
+    @Autowired com.personaai.license.server.license.LicenseRepository licenses;
+
+    /** 한 행은 한 형식만: 이전 형식 행(마이그레이션 전 데이터 모양)은 허용, 섞인 행·불완전한 새 형식 행은 거부. */
+    @Test
+    void formatShapeAllowsExactlyOneFormat() {
+        String legacy = UUID.randomUUID().toString().replace("-", "");
+        jdbc.sql("""
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  online_stt, offline_stt, issued_at, not_before, not_after, grace_period_days, warning_notice,
+                  public_key_fp, issued_by)
+                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 0, 1, now(), now(), now() + interval '1 day', 14, 'w', ?, ?)""")
+                .params(legacy, UUID.randomUUID(), "0".repeat(64), adminId()).update();
+        var r = licenses.findByLicenseId(legacy).orElseThrow();
+        assertThat(r.legacy()).isTrue();
+        assertThat(r.offlineStt()).isEqualTo(1);
+        assertThat(r.channels()).isEmpty();
+        assertThat(r.graceUntil()).isEqualTo(r.notAfter().plusSeconds(14 * 86_400L));
+
+        String mixed = """
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  online_stt, offline_stt, grace_period_days, license_ver, solution, channels_total, channels_json,
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
+                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 0, 1, 0, 1, 'x', 3, '{}', now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+        assertThatThrownBy(() -> jdbc.sql(mixed).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
+                "0".repeat(64), adminId()).update()).hasMessageContaining("license_format_shape");
+        String incomplete = """
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  license_ver, solution, channels_total, issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
+                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 1, 'x', 3, now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+        assertThatThrownBy(() -> jdbc.sql(incomplete).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
+                "0".repeat(64), adminId()).update()).hasMessageContaining("license_format_shape");
+        String badVer = """
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  license_ver, solution, channels_total, channels_json, issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
+                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 2, 'x', 3, '{}', now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+        assertThatThrownBy(() -> jdbc.sql(badVer).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
+                "0".repeat(64), adminId()).update()).isInstanceOf(DataAccessException.class);
+    }
 
     long adminId() {
         return jdbc.sql("SELECT id FROM app_user WHERE username = 'root.admin'").query(Long.class).single();
@@ -26,9 +64,10 @@ class DatabaseGuardIT extends IntegrationTestBase {
         String id = UUID.randomUUID().toString().replace("-", "");
         jdbc.sql("""
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
-                  online_stt, offline_stt, issued_at, not_before, not_after, grace_period_days, warning_notice,
-                  public_key_fp, issued_by)
-                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 0, 1, now(), now(), now() + interval '1 day', 0, 'w', ?, ?)""")
+                  license_ver, solution, channels_total, channels_json,
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
+                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 1, 'sonastt-universal', 3, '{"offline":{"sonastt":3},"online":{}}',
+                  now(), now(), now() + interval '1 day', 'w', ?, ?)""")
                 .params(id, UUID.randomUUID(), "0".repeat(64), adminId()).update();
         jdbc.sql("UPDATE license SET status='ISSUED', license_text='x', license_sha256=? WHERE license_id=?")
                 .params("1".repeat(64), id).update();
@@ -49,6 +88,8 @@ class DatabaseGuardIT extends IntegrationTestBase {
         String id = insertIssued();
         assertDenied(() -> jdbc.sql("DELETE FROM license WHERE license_id = ?").param(id).update());
         assertDenied(() -> jdbc.sql("UPDATE license SET offline_stt = 99 WHERE license_id = ?").param(id).update()); // 열 단위 권한
+        assertDenied(() -> jdbc.sql("UPDATE license SET channels_total = 99 WHERE license_id = ?").param(id).update()); // 새 열도
+        assertDenied(() -> jdbc.sql("UPDATE license SET channels_json = '{}' WHERE license_id = ?").param(id).update());
     }
 
     @Test
@@ -59,7 +100,14 @@ class DatabaseGuardIT extends IntegrationTestBase {
                     .hasMessageContaining("not allowed");
             assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET license_text='forged' WHERE license_id='" + id + "'"))
                     .hasMessageContaining("not allowed");
+            // BEFORE UPDATE 트리거가 CHECK 보다 먼저 실행된다 → 형식을 섞는 변경도 불변 트리거가 먼저 거부
             assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET offline_stt=50 WHERE license_id='" + id + "'"))
+                    .hasMessageContaining("immutable");
+            assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET channels_total=50 WHERE license_id='" + id + "'"))
+                    .hasMessageContaining("immutable");
+            assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET solution='x' WHERE license_id='" + id + "'"))
+                    .hasMessageContaining("immutable");
+            assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET channels_json='{}' WHERE license_id='" + id + "'"))
                     .hasMessageContaining("immutable");
             assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET status='VOID' WHERE license_id='" + id + "'"))
                     .hasMessageContaining("not allowed"); // 사유 없는 무효 처리

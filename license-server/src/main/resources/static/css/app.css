@@ -194,6 +194,18 @@ textarea.code-input { font-family: var(--mono); font-size: 12.5px; min-height: 1
 .toolbar .w-md { width: 320px; } .toolbar .w-sm { width: 170px; }
 .toolbar .grow { flex: 1; }
 
+/* ---- 채널(엔진) 입력·표시 ---- */
+.engines { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px 12px; margin: 0; min-width: 0; background: var(--surface-2); }
+.engines legend { padding: 0 6px; font-size: 12.5px; font-weight: 650; color: var(--fg-2); }
+.engine-head, .engine-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 120px; gap: 8px; }
+.engine-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.engine-row + .engine-row { margin-top: 6px; }
+.channels { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.ch-total { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ch-group { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ch-label { font-size: 11.5px; color: var(--muted); }
+.ch-eng { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--sunken); border: 1px solid var(--line); white-space: nowrap; }
+
 /* ---- 코드·기타 ---- */
 pre, .code { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--sunken); border: 1px solid var(--line);
   border-radius: var(--r-sm); padding: 12px 14px; overflow: auto; white-space: pre-wrap; word-break: break-all; max-height: 420px; color: var(--fg-2); }
@@ -268,6 +280,7 @@ tr.manage-row .manage-panel { margin-top: 0; padding-top: 12px; }
   .side-user .links { margin: 0; }
   .content { padding: 20px 16px 48px; }
   .form-grid, .reauth .reauth-fields { grid-template-columns: minmax(0, 1fr); }
+  .engine-head, .engine-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 84px; }
   .kv { grid-template-columns: minmax(0, 1fr); }
   .kv dt { border-bottom: 0; padding-bottom: 0; }
   .kv > :nth-last-child(2) { border-bottom: 0; }
