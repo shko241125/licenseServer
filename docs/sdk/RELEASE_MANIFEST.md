@@ -20,7 +20,7 @@ SDK 패키지는 라이선스 **발급 서버와 분리해서** 발행합니다.
 | `integration/harness/` | JNI 참조 구현(★ = SDK로 옮길 부분) + Java 결합 테스트 | |
 | `integration/cmake-consumer/` | SDK 형태 CMake 소비자(연동 인수 테스트) | |
 | `scripts/check.sh` | 전체 검증 7단계 | |
-| `docs/sdk/` | 이 문서 묶음(README, 01~06, 이 목록) | |
+| `docs/sdk/` | 이 문서 묶음(README, 01~07, 이 목록) | |
 | `.gitattributes` | `*.sh` LF 줄바꿈 유지 | |
 | `README.md` *(생성)* | 패키지 루트 안내 → `docs/sdk/README.md` | |
 | `VERSION` *(생성)* | 버전과 원 저장소 커밋 | |
@@ -47,11 +47,11 @@ SDK 패키지는 라이선스 **발급 서버와 분리해서** 발행합니다.
 1. **버전 결정**: `CMakeLists.txt`의 `project(stt_license VERSION x.y.z)`와 `docs/sdk/README.md` §6 변경 이력을 같이 고칩니다.
    - 공개 헤더 API·오류 코드 순번·라이선스 규격의 호환이 깨지면 x를 올립니다.
    - API 추가는 y, 수정만 있으면 z를 올립니다.
-2. 커밋하고 태그를 답니다: `git tag sdk-v1.1.0`
+2. 커밋하고 태그를 답니다: `git tag -a sdk-v2.0.0 -m "stt_license SDK 2.0.0"`
 3. 패키지를 만들고 검증합니다(리눅스, 필요 도구는 05-testing.md §2).
    ```bash
-   scripts/make-sdk-release.sh --ref sdk-v1.1.0 --verify
-   # → build/sdk-release/stt-license-sdk-1.1.0.tar.gz (+ .sha256)
+   scripts/make-sdk-release.sh --ref sdk-v2.0.0 --verify
+   # → build/sdk-release/stt-license-sdk-2.0.0.tar.gz (+ .sha256)
    ```
    커밋 전 사전 점검은 `--worktree`로 합니다. 결과 버전에 `-dirty`가 붙으며, 이 결과물은 발행하지 않습니다.
 4. `.tar.gz`와 `.sha256`을 SDK 팀에 전달합니다. **운영 공개키 `public.key`는 패키지와 별도로**, 그 SHA-256 지문은 **또 다른 경로로** 알립니다(01-build.md §6.2). 공개키가 바뀌지 않았다면 다시 보낼 필요는 없습니다(SDK 저장소에 이미 커밋됨).
@@ -72,4 +72,6 @@ SDK 패키지는 라이선스 **발급 서버와 분리해서** 발행합니다.
 - [ ] `VERSION`의 커밋이 태그와 일치
 - [ ] `docs/sdk/README.md` 변경 이력에 이번 버전이 있음
 - [ ] 이전 버전 대비 `core/testdata/golden_*` 변경 없음(바뀌었다면 기존 라이선스 호환 영향 검토 기록)
-- [ ] 오류 코드 순번 변경 없음(헤더 `static_assert`)
+  - 2.0.0: 형식 변경으로 재생성(사용자 승인, 공개키 동일). 영향과 대응은 07-upgrade-2.0.md
+- [ ] 오류 코드 순번 변경 없음(헤더 `static_assert`). 새 코드는 끝에만 추가(2.0.0: `1011`)
+- [ ] 호환 깨짐 버전이면 업그레이드 안내가 있음(2.0.0: 07-upgrade-2.0.md)
