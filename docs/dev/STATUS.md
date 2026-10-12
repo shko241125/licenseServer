@@ -11,7 +11,7 @@
 | 검증 코어 `stt_license` 2.0.0 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11. 공개키 경로 결정 규칙(D29, 1.1.2) — **1.1.1은 상대 `-D` 회귀가 있어 쓰지 않음**. 2.0.0: 라이선스 형식 `license_ver` 1(D34~D36, D38) — `solution`, `total` + **이름 자유 항목**별 세부 항목 상한, 유예 삭제, `1011` 추가, 이전 형식 `1006` |
 | `licensectl` | 완료 | keygen / issue / verify / sign / pubkey. 2.0.0: 새 형식 요약·`-json`·발급 대장, 발급 정책(운영 영구) 강제, `VALID`일 때만 종료 코드 0 |
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증. 2.0.0: 엔진별 세션 풀(`sonastt`·`sonaasr`), 엔진 상한·`total`·`1011` 시험 |
-| SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~06, `scripts/make-sdk-release.sh`(허용 목록) |
+| SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~07(07 = 1.x → 2.0.0 업그레이드 안내), `scripts/make-sdk-release.sh`(허용 목록). **2.0.0 정식 발행: 태그 `sdk-v2.0.0`**(첫 태그 발행) |
 | 발급 서버 v1.3 | 완료 | 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정. v1.3: `license_ver` 1 발급(D37, D38) — 마이그레이션 V3(이전 기록 보존·"이전 형식" 표시), (항목, 세부 항목, 상한) 행 입력, 운영 영구, 문자열 길이 UTF-8 바이트 기준으로 수정 |
 | 원격 작업 기반 | 완료(클라우드 실측 전) | `CLAUDE.md`, 이 파일, `DECISIONS.md`, `scripts/cloud-setup.sh` |
 | SDK·STT 서버 실제 적용 | **미착수(다른 저장소)** | 계획: `docs/sdk/02-integration.md`, `03-stt-server.md`, 수용 기준 `05-testing.md` §3 |
