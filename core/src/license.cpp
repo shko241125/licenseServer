@@ -9,12 +9,13 @@ namespace {
 
 using json::Value;
 
-// 사람이 읽는 license.lic 의 키 출력 순서 (원문 §3 순서 + 추가 필드). 서명과는 무관하다.
+// 사람이 읽는 license.lic 의 키 출력 순서 (license_ver 1 예시 순서). 서명과는 무관하다.
+// 예시의 항목(offline, online)·세부 항목 이름도 예시 순서대로 둔다. 목록에 없는 이름은 그 뒤에 사전순.
 const std::vector<std::string>& KeyRank() {
   static const std::vector<std::string> rank = {
-      "format_version", "license_id", "project_name", "license_type", "site_id",
-      "allowed_channels", "online_stt", "offline_stt",
-      "validity", "issued_at", "not_before", "not_after", "grace_period_days",
+      "license_ver", "license_id", "project_name", "license_type", "solution", "site_id",
+      "allowed_channels", "total", "offline", "online", "sonastt", "sonaml", "sonaasr",
+      "validity", "issued_at", "not_before", "not_after",
       "warning_notice", "signature"};
   return rank;
 }
@@ -87,6 +88,28 @@ class Extractor {
     return true;
   }
 
+  // allowed_channels 의 total 을 뺀 모든 키 = 항목(이름 자유) → { 세부 항목: 상한 }.
+  // 이름은 파서가 키 문법 [a-z0-9_]{1,64} 로 이미 제한한다.
+  bool Groups(const Value& ch, int total, std::map<std::string, std::map<std::string, int>>* out) {
+    std::map<std::string, std::map<std::string, int>> r;
+    for (const auto& [group, g] : ch.members) {
+      if (group == "total") continue;
+      const std::string base = "allowed_channels." + group;
+      if (g.type != Value::Type::Object) return Fail(base, "must be an object");
+      if (r.size() == kMaxGroups) return Fail("allowed_channels", "too many groups (max 64)");
+      if (g.members.size() > kMaxEngines) return Fail(base, "too many items (max 64)");
+      std::map<std::string, int>& items = r[group];
+      for (const auto& [name, v] : g.members) {
+        if (v.type != Value::Type::Int) return Fail(base + "." + name, "must be an integer");
+        if (v.num > kMaxChannels) return Fail(base + "." + name, "out of range");
+        if (v.num > total) return Fail(base + "." + name, "must not exceed allowed_channels.total");
+        items[name] = static_cast<int>(v.num);
+      }
+    }
+    *out = std::move(r);
+    return true;
+  }
+
   bool Time(const Value& parent, const char* key, int64_t* out) {
     const Value* v = parent.Find(key);
     if (!v || v->type != Value::Type::String || !ParseUtcTime(v->str, out)) {
@@ -95,8 +118,8 @@ class Extractor {
     return true;
   }
 
-  bool Fail(const char* key, const char* why) {
-    if (detail_) *detail_ = std::string(key) + ": " + why;
+  bool Fail(const std::string& key, const char* why) {
+    if (detail_) *detail_ = key + ": " + why;
     return false;
   }
 
@@ -107,36 +130,48 @@ class Extractor {
 Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
   Extractor x(detail);
   LicenseData d;
-  // format_version을 먼저 본다: 미래 형식이면 다른 필드 오류보다 "미지원 버전"이 정확한 사유다.
-  const Value* fv = root.Find("format_version");
-  if (!fv || fv->type != Value::Type::Int) {
-    x.Fail("format_version", "must be an integer");
+  // license_ver 를 먼저 본다: 다른 형식이면 다른 필드 오류보다 "미지원 버전"이 정확한 사유다.
+  const Value* lv = root.Find("license_ver");
+  if (!lv) {
+    if (root.Find("format_version")) {  // 이전 형식(2026-10-06 이전 발급분)
+      if (detail) *detail = "legacy license format (format_version) is not supported; reissue with license_ver 1";
+      return Error::UnsupportedVersion;
+    }
+    x.Fail("license_ver", "must be an integer");
     return Error::InvalidField;
   }
-  if (fv->num != kFormatVersion) {
-    if (detail) *detail = "format_version " + std::to_string(fv->num) + " is not supported";
+  if (lv->type != Value::Type::Int) {
+    x.Fail("license_ver", "must be an integer");
+    return Error::InvalidField;
+  }
+  if (lv->num != kLicenseVer) {
+    if (detail) *detail = "license_ver " + std::to_string(lv->num) + " is not supported";
     return Error::UnsupportedVersion;
   }
-  d.format_version = kFormatVersion;
+  d.license_ver = kLicenseVer;
 
   const Value* ch = nullptr;
   const Value* va = nullptr;
   bool ok = x.Text(root, "license_id", 128, &d.license_id) &&
             x.Text(root, "project_name", 256, &d.project_name) &&
             x.Text(root, "license_type", 64, &d.license_type) &&
+            x.Text(root, "solution", 128, &d.solution) &&
             x.Text(root, "site_id", 256, &d.site_id) &&
             x.Text(root, "warning_notice", 4096, &d.warning_notice) &&
             (ch = x.Object(root, "allowed_channels")) != nullptr &&
-            x.Int(*ch, "online_stt", 0, kMaxChannels, &d.online) &&
-            x.Int(*ch, "offline_stt", 0, kMaxChannels, &d.offline) &&
+            x.Int(*ch, "total", 1, kMaxChannels, &d.total) &&
+            x.Groups(*ch, d.total, &d.groups) &&
             (va = x.Object(root, "validity")) != nullptr &&
             x.Time(*va, "issued_at", &d.issued_at) &&
             x.Time(*va, "not_before", &d.not_before) &&
-            x.Time(*va, "not_after", &d.not_after) &&
-            x.Int(*va, "grace_period_days", 0, kMaxGraceDays, &d.grace_days);
+            x.Time(*va, "not_after", &d.not_after);
   if (!ok) return Error::InvalidField;
-  if (d.online == 0 && d.offline == 0) {
-    x.Fail("allowed_channels", "at least one channel type must be greater than 0");
+  bool any_positive = false;
+  for (const auto& [group, items] : d.groups) {
+    for (const auto& [name, n] : items) any_positive = any_positive || n > 0;
+  }
+  if (!any_positive) {
+    x.Fail("allowed_channels", "at least one item must allow 1 or more channels");
     return Error::InvalidField;
   }
   if (d.not_before >= d.not_after) {
@@ -151,8 +186,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 
 State LicenseData::StateAt(int64_t now) const {
   if (now < not_before) return State::NotYetValid;
-  if (now <= not_after) return State::Valid;
-  if (now <= GraceUntil()) return State::Grace;
+  if (now <= not_after) return State::Valid;  // not_after 시각까지 포함
   return State::Expired;
 }
 
@@ -308,18 +342,18 @@ Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, st
   LicenseData l;
   if (Error e = ExtractFields(d->root, &l, detail); e != Error::Ok) return e;
   LicenseFields f;
-  f.format_version = l.format_version;
+  f.license_ver = l.license_ver;
   f.license_id = l.license_id;
   f.project_name = l.project_name;
   f.license_type = l.license_type;
+  f.solution = l.solution;
   f.site_id = l.site_id;
   f.warning_notice = l.warning_notice;
-  f.online_stt = l.online;
-  f.offline_stt = l.offline;
+  f.total_channels = l.total;
+  f.channels = l.groups;
   f.issued_at = l.issued_at;
   f.not_before = l.not_before;
   f.not_after = l.not_after;
-  f.grace_period_days = l.grace_days;
   *out = std::move(f);
   return Error::Ok;
 }
@@ -328,7 +362,6 @@ State StateAt(const LicenseFields& f, std::int64_t now) {
   LicenseData l;
   l.not_before = f.not_before;
   l.not_after = f.not_after;
-  l.grace_days = f.grace_period_days;
   return l.StateAt(now);
 }
 
@@ -343,11 +376,9 @@ Error VerifyLicenseWith(const std::string& license_text, const uint8_t pub[crypt
       if (detail) *detail = "license is not valid before " + FormatUtcTime(f.not_before);
       return Error::NotYetValid;
     case State::Expired:
-      if (detail) *detail = "license and grace period ended at " + FormatUtcTime(
-          f.not_after + int64_t{f.grace_period_days} * 86400);
+      if (detail) *detail = "license expired at " + FormatUtcTime(f.not_after);
       return Error::Expired;
     case State::Valid:
-    case State::Grace:
       break;
   }
   *out = std::move(v);  // 모든 검증을 통과했을 때만 결과를 채운다
@@ -419,7 +450,21 @@ Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kS
     if (detail) *detail = "contract must not contain \"signature\"";
     return Error::InvalidField;
   }
-  if (!root.Find("format_version")) root.Set("format_version", json::MakeInt(kFormatVersion));
+  // 이전 형식의 키가 섞인 계약은 거부한다. 검증기는 모르는 키를 무시하므로, 그대로 서명하면
+  // 유예 기간 등이 적용되는 것처럼 보이는 라이선스가 나간다.
+  {
+    const Value* ch = root.Find("allowed_channels");
+    const Value* va = root.Find("validity");
+    const char* legacy = root.Find("format_version") ? "format_version"
+        : (ch && ch->Find("online_stt")) ? "allowed_channels.online_stt"
+        : (ch && ch->Find("offline_stt")) ? "allowed_channels.offline_stt"
+        : (va && va->Find("grace_period_days")) ? "validity.grace_period_days" : nullptr;
+    if (legacy) {
+      if (detail) *detail = std::string(legacy) + ": legacy format key is not allowed in license_ver 1 contracts";
+      return Error::InvalidField;
+    }
+  }
+  if (!root.Find("license_ver")) root.Set("license_ver", json::MakeInt(kLicenseVer));
   if (!root.Find("license_id")) {
     uint8_t id[16];
     if (!crypto::RandomBytes(id, sizeof id)) return Error::Internal;
@@ -438,6 +483,18 @@ Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kS
   if (data.license_type != "production" && data.license_type != "trial" &&
       data.license_type != "poc") {
     if (detail) *detail = "license_type: must be one of production, trial, poc";
+    return Error::InvalidField;
+  }
+  // 발급 정책: 운영은 영구(사실상 무기한), 시험·PoC 는 실제 종료일.
+  int64_t permanent = 0;
+  ParseUtcTime(kPermanentNotAfter, &permanent);
+  if (data.license_type == "production" && data.not_after != permanent) {
+    if (detail) *detail = std::string("validity.not_after: production licenses must be permanent (") +
+                          kPermanentNotAfter + ")";
+    return Error::InvalidField;
+  }
+  if (data.license_type != "production" && data.not_after == permanent) {
+    if (detail) *detail = "validity.not_after: trial/poc licenses must have a real end date";
     return Error::InvalidField;
   }
 

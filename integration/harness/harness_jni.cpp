@@ -1,5 +1,5 @@
 // JNI 통합 하네스: 실제 STT SDK(SonaSttAPI)의 호출 모델을 흉내 내어 라이선스 코어 결합 방식을 실행 검증한다.
-//   connectSonaSTT    → connect(licensePath, sonasttSessions, whisperSessions)
+//   connectSonaSTT    → connect(licensePath, sonasttSessions, sonaasrSessions)   (오프라인 엔진 2종)
 //   getIdleSession    → getIdleSession(engine)        : 채널 점유 후 세션 예약
 //   onResult/onError  → finishTask(sessionId)         : 세션 반환 + 채널 반납
 //   getSTTSessionInfo → getSTTSessionInfo()           : 세션 + 라이선스 상태
@@ -37,7 +37,7 @@ struct Session {
 struct State {
   std::mutex mu;
   std::unique_ptr<lic::Manager> manager;
-  std::map<std::string, Session> sessions;  // "sonastt-0", "whisper-3" ...
+  std::map<std::string, Session> sessions;  // "sonastt-0", "sonaasr-3" ...
   lic::VerifiedLicense host_license;        // connectHostLicense 로 받은, 서명 검증된 라이선스
   lic::VerifyMode host_mode = lic::VerifyMode::SignatureOnly;
 };
@@ -123,22 +123,23 @@ extern "C" {
 
 JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_connect(JNIEnv* env, jobject,
                                                                jstring jpath, jint sonastt,
-                                                               jint whisper) {
+                                                               jint sonaasr) {
   return Guard([&]() -> jint {
     std::string path;
-    if (!GetString(env, jpath, &path) || sonastt < 0 || whisper < 0) return kErrInvalidArgument;
+    if (!GetString(env, jpath, &path) || sonastt < 0 || sonaasr < 0) return kErrInvalidArgument;
     State& g = G();
     std::lock_guard<std::mutex> lock(g.mu);
     // ★ 기동 게이트: 라이선스가 유효하지 않으면 SDK 초기화 자체를 실패시킨다.
     std::unique_ptr<lic::Manager> m;
     lic::Error e = lic::Manager::Open(path, &m);
     if (e != lic::Error::Ok) return LicenseCode(e);
-    // ★ 세션 풀 크기: 엔진별 설정값과 라이선스 한도 중 작은 값 (한도를 넘는 GPU 메모리 할당 방지).
-    //   동시 사용 총량은 Acquire 가 offline_stt 로 따로 강제한다.
-    const int cap = m->MaxChannels(lic::Kind::Offline);
+    // ★ 세션 풀 크기: 엔진별 설정값과 그 엔진의 라이선스 상한(allowed_channels.offline.<엔진>) 중 작은 값
+    //   (한도를 넘는 GPU 메모리 할당 방지). 모든 엔진 합의 동시 사용량은 Acquire 가 total 로 따로 강제한다.
     g.sessions.clear();
-    for (int i = 0; i < std::min<int>(sonastt, cap); ++i) g.sessions["sonastt-" + std::to_string(i)].engine = "sonastt";
-    for (int i = 0; i < std::min<int>(whisper, cap); ++i) g.sessions["whisper-" + std::to_string(i)].engine = "whisper";
+    for (const auto& [engine, configured] : {std::pair<std::string, int>{"sonastt", sonastt}, {"sonaasr", sonaasr}}) {
+      const int pool = std::min<int>(configured, m->MaxChannels("offline", engine));
+      for (int i = 0; i < pool; ++i) g.sessions[engine + "-" + std::to_string(i)].engine = engine;
+    }
     g.manager = std::move(m);
     return 0;
   }, jint{kErrInternal});
@@ -156,8 +157,9 @@ JNIEXPORT jstring JNICALL Java_licenseharness_SttHarness_getIdleSession(JNIEnv* 
     if (!g.manager) return ErrorJson(kErrNotConnected, "NOT_CONNECTED", "call connect first");
     for (auto& [id, s] : g.sessions) {
       if (s.engine != engine || s.busy) continue;
-      // ★ 채널 점유: 두 엔진 합계가 offline_stt 를 넘지 않게 한다. 만료·미개시도 여기서 거부된다.
-      lic::Error e = g.manager->Acquire(lic::Kind::Offline, &s.channel);
+      // ★ 채널 점유: 그 엔진의 상한과 total(모든 엔진 합) 상한을 함께 지킨다. 만료·미개시,
+      //   라이선스에서 빠진 엔진(EngineNotLicensed, 1011)도 여기서 거부된다.
+      lic::Error e = g.manager->Acquire("offline", s.engine, &s.channel);
       if (e != lic::Error::Ok) {
         return ErrorJson(LicenseCode(e), lic::ErrorName(e), lic::ErrorMessage(e));
       }
@@ -248,16 +250,19 @@ JNIEXPORT jstring JNICALL Java_licenseharness_SttHarness_hostLicenseInfo(JNIEnv*
     std::lock_guard<std::mutex> lock(g.mu);
     const lic::VerifiedLicense& v = g.host_license;
     if (!v.valid()) return ErrorJson(kErrNotConnected, "NOT_CONNECTED", "no verified host license");
-    std::int64_t offline = -1, online = -1;
-    std::string site, not_after, project;
-    v.GetInt("allowed_channels.offline_stt", &offline);   // 없으면 -1 (SDK 기본값 사용 신호)
-    v.GetInt("allowed_channels.online_stt", &online);
+    std::int64_t total = -1, sonastt = -1, sonaasr = -1;
+    std::string site, not_after, project, solution;
+    v.GetInt("allowed_channels.total", &total);                  // 없으면 -1 (SDK 기본값 사용 신호)
+    v.GetInt("allowed_channels.offline.sonastt", &sonastt);
+    v.GetInt("allowed_channels.offline.sonaasr", &sonaasr);
+    v.GetString("solution", &solution);
     v.GetString("site_id", &site);
     v.GetString("validity.not_after", &not_after);
     v.GetString("project_name", &project);
     lic::LicenseFields f;
     lic::Error std_e = lic::ParseStandardFields(v, &f);    // 선택: 표준 규칙 판정 결과만 알려 줌
-    return "{\"result\":0,\"offline_stt\":" + std::to_string(offline) + ",\"online_stt\":" + std::to_string(online) +
+    return "{\"result\":0,\"total\":" + std::to_string(total) + ",\"offline_sonastt\":" + std::to_string(sonastt) +
+           ",\"offline_sonaasr\":" + std::to_string(sonaasr) + ",\"solution\":" + Quote(solution) +
            ",\"site_id\":" + Quote(site) + ",\"not_after\":" + Quote(not_after) +
            ",\"project_name\":" + Quote(project) + ",\"standard\":" + Quote(lic::ErrorName(std_e)) +
            ",\"mode\":" + Quote(lic::VerifyModeName(g.host_mode)) +

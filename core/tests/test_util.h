@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "crypto.h"
 #include "detail.h"
@@ -31,28 +33,54 @@ inline std::array<uint8_t, 32> PublicOf(const std::array<uint8_t, 32>& seed) {
   return pub;
 }
 
+// license_ver 1 계약. 기본값은 요구 예시 그대로(운영 = 영구 not_after).
 struct Contract {
+  using Engines = std::vector<std::pair<std::string, int>>;
   std::string license_id = "0123456789abcdef0123456789abcdef";
   std::string project_name = "STT Platform Modernization";
   std::string license_type = "production";
+  std::string solution = "sonastt-universal";
   std::string site_id = "SEOUL-MAIN-DC";
-  int online = 16, offline = 8;
+  int total = 16;
+  Engines offline = {{"sonastt", 8}, {"sonaml", 4}, {"sonaasr", 4}};
+  Engines online = {{"sonastt", 8}, {"sonaasr", 2}};
+  std::vector<std::pair<std::string, Engines>> extra;  // offline·online 뒤에 붙일 사용자 정의 항목
   std::string issued_at = "2026-09-21T00:00:00Z";
   std::string not_before = "2026-09-21T00:00:00Z";
-  std::string not_after = "2027-09-20T23:59:59Z";
-  int grace = 14;
+  std::string not_after = "9999-12-31T23:59:59Z";
   std::string warning_notice =
       "This software license is geographically restricted to the designated site. "
       "Unauthorized replication or exceeding allowed channels is strictly prohibited.";
 
+  // 시험 라이선스(실제 종료일). 기간 경계 테스트용.
+  static Contract Trial(const std::string& not_after = "2027-09-20T23:59:59Z") {
+    Contract c;
+    c.license_type = "trial";
+    c.not_after = not_after;
+    return c;
+  }
+
+  static std::string Map(const Engines& m) {
+    std::string s = "{";
+    for (size_t i = 0; i < m.size(); ++i) {
+      s += (i ? ",\"" : "\"") + m[i].first + "\":" + std::to_string(m[i].second);
+    }
+    return s + "}";
+  }
+
+  std::string Extra() const {
+    std::string s;
+    for (const auto& [group, items] : extra) s += ",\"" + group + "\":" + Map(items);
+    return s;
+  }
+
   std::string Json() const {
-    return "{\"format_version\":1,\"license_id\":\"" + license_id + "\",\"project_name\":\"" +
-           project_name + "\",\"license_type\":\"" + license_type + "\",\"site_id\":\"" +
-           site_id + "\",\"allowed_channels\":{\"online_stt\":" + std::to_string(online) +
-           ",\"offline_stt\":" + std::to_string(offline) + "},\"validity\":{\"issued_at\":\"" +
-           issued_at + "\",\"not_before\":\"" + not_before + "\",\"not_after\":\"" + not_after +
-           "\",\"grace_period_days\":" + std::to_string(grace) + "},\"warning_notice\":\"" +
-           warning_notice + "\"}";
+    return "{\"license_ver\":1,\"license_id\":\"" + license_id + "\",\"project_name\":\"" +
+           project_name + "\",\"license_type\":\"" + license_type + "\",\"solution\":\"" + solution +
+           "\",\"site_id\":\"" + site_id + "\",\"allowed_channels\":{\"total\":" + std::to_string(total) +
+           ",\"offline\":" + Map(offline) + ",\"online\":" + Map(online) + Extra() +
+           "},\"validity\":{\"issued_at\":\"" + issued_at + "\",\"not_before\":\"" + not_before +
+           "\",\"not_after\":\"" + not_after + "\"},\"warning_notice\":\"" + warning_notice + "\"}";
   }
 };
 

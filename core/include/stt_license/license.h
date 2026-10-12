@@ -6,7 +6,7 @@
 //
 // (B) 사용 흐름 (SDK):
 //   connectSonaSTT  → Manager::Open(path, &mgr)       실패 시 SDK 초기화 실패
-//   getIdleSession  → mgr->Acquire(Kind::Offline, &ch) 실패 시 세션 예약 거부
+//   getIdleSession  → mgr->Acquire("offline", "sonastt", &ch) 실패 시 세션 예약 거부(세부 항목 상한·total 상한)
 //   작업 종료/중단   → ch.Release() 또는 Channel 소멸
 //   getSTTSessionInfo → InfoToJson(mgr->Snapshot())
 //
@@ -18,15 +18,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace stt {
 namespace license {
 
-enum class Kind { Online = 0, Offline = 1 };  // allowed_channels.online_stt / offline_stt
-
-enum class State { NotYetValid, Valid, Grace, Expired };
+// 라이선스 형식(license_ver 1)에는 유예 기간이 없다: not_after 를 지나면 곧바로 Expired.
+enum class State { NotYetValid, Valid, Expired };
 
 // 순번은 JNI/API 오류 코드(1000 + 순번)로 쓰인다. 기존 값의 순서를 바꾸지 말고 새 값은 끝에 추가할 것.
 enum class Error {
@@ -36,24 +37,33 @@ enum class Error {
   ParseError,          // JSON 형식 위반(중복 키, 실수, null, 배열 등 포함)
   BadSignature,        // 서명 누락·형식 오류·불일치
   InvalidField,        // 필수 필드 누락, 값 범위·형식 위반
-  UnsupportedVersion,  // format_version 미지원
+  UnsupportedVersion,  // license_ver 미지원, 또는 이전 형식(format_version) 라이선스
   NotYetValid,         // not_before 이전
-  Expired,             // 유예 기간까지 종료
-  ChannelLimit,        // 허용 채널 모두 사용 중
+  Expired,             // not_after 이후
+  ChannelLimit,        // 엔진별 상한 또는 total 상한까지 모두 사용 중 (잠시 후 재시도)
   Internal,            // 내장 공개키 손상, 암호 라이브러리 실패 등
+  EngineNotLicensed,   // 라이선스에 없는(또는 상한 0인) 항목·세부 항목 (재시도해도 같음)
 };
 static_assert(static_cast<int>(Error::Internal) == 10, "Error codes are part of the API");
+static_assert(static_cast<int>(Error::EngineNotLicensed) == 11, "Error codes are part of the API");
 
 const char* ErrorName(Error e);     // 예: "LICENSE_BAD_SIGNATURE" (API 오류 코드로 사용)
 const char* ErrorMessage(Error e);  // 현장 조치 문구 (로그용)
-const char* StateName(State s);     // "VALID", "GRACE", ...
+const char* StateName(State s);     // "NOT_YET_VALID", "VALID", "EXPIRED"
+
+// 세부 항목(엔진) 하나의 채널 사용 현황. group = allowed_channels 의 항목 이름(예: "offline").
+struct ChannelUsage {
+  std::string group;
+  std::string engine;
+  int max = 0, used = 0;
+};
 
 // 조회용 스냅샷. 서명값은 포함하지 않는다. 시각은 모두 UTC epoch 초.
 struct Info {
-  std::string license_id, project_name, license_type, site_id;
-  int online_max = 0, offline_max = 0;
-  int online_used = 0, offline_used = 0;
-  std::int64_t issued_at = 0, not_before = 0, not_after = 0, grace_until = 0;
+  std::string license_id, project_name, license_type, solution, site_id;
+  int total_max = 0, total_used = 0;          // 전체 동시 세션 상한·사용 중
+  std::vector<ChannelUsage> engines;          // 항목 이름순, 그 안에서 세부 항목 이름순
+  std::int64_t issued_at = 0, not_before = 0, not_after = 0;
   std::int64_t checked_at = 0;                // 이 스냅샷을 만든 시각
   State state = State::Expired;
   Error last_reload_error = Error::Ok;    // 마지막 파일 재적재 실패 사유 (성공/미변경이면 Ok)
@@ -70,7 +80,7 @@ namespace detail { struct Config; struct Shared; struct VerifiedData; struct Ver
 
 // 서명 검증을 통과한 라이선스. 값은 서명된 내용에서만 꺼낼 수 있다(서명 범위 밖의 값은 존재하지 않음).
 // 필수 필드·범위·기간은 검증하지 않았다 — 무엇을 어떻게 쓸지는 호출자(SDK)가 결정한다.
-// 경로는 점으로 구분한다: "site_id", "allowed_channels.offline_stt", "validity.not_after".
+// 경로는 점으로 구분한다: "site_id", "allowed_channels.total", "allowed_channels.offline.sonastt", "validity.not_after".
 class VerifiedLicense {
  public:
   VerifiedLicense();
@@ -94,20 +104,21 @@ class VerifiedLicense {
 // Internal(내장 공개키 손상). license_text 는 표준 UTF-8 이어야 한다(JNI 에서는 Utf16ToUtf8 사용).
 Error VerifySignature(const std::string& license_text, VerifiedLicense* out, std::string* detail = nullptr);
 
-// 선택 도우미: 표준 스키마(v1) 규칙으로 필드를 해석·검증한다(필수 필드, 범위, format_version, 시각 형식).
-// 쓸지 말지는 SDK 가 결정한다. 실패 시 InvalidField / UnsupportedVersion.
+// 선택 도우미: 표준 형식(license_ver 1) 규칙으로 필드를 해석·검증한다(필수 필드, 범위, license_ver, 시각 형식).
+// 쓸지 말지는 SDK 가 결정한다. 실패 시 InvalidField / UnsupportedVersion(이전 형식 format_version 포함).
 struct LicenseFields {
-  int format_version = 0;
-  std::string license_id, project_name, license_type, site_id, warning_notice;
-  int online_stt = 0, offline_stt = 0;
-  std::int64_t issued_at = 0, not_before = 0, not_after = 0;  // UTC epoch 초
-  int grace_period_days = 0;
+  int license_ver = 0;
+  std::string license_id, project_name, license_type, solution, site_id, warning_notice;
+  int total_channels = 0;                                // allowed_channels.total (전체 동시 세션 상한)
+  // allowed_channels 의 total 을 뺀 항목들: 항목 이름 → (세부 항목 이름 → 상한 ≤ total). 이름은 자유(예: offline, online).
+  std::map<std::string, std::map<std::string, int>> channels;
+  std::int64_t issued_at = 0, not_before = 0, not_after = 0;  // UTC epoch 초 (영구 = 9999-12-31T23:59:59Z)
 };
 Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, std::string* detail = nullptr);
 State StateAt(const LicenseFields& fields, std::int64_t now_epoch_seconds);
 
 // 서명 + 값 검증: VerifySignature → ParseStandardFields → 기간 판정(시스템 시각).
-// NotYetValid·Expired 면 실패, Grace 는 성공(경고는 StateAt(*fields, now) 로 판단). fields 는 nullptr 가능.
+// NotYetValid·Expired 면 실패. fields 는 nullptr 가능.
 Error VerifyLicense(const std::string& license_text, VerifiedLicense* out, LicenseFields* fields,
                     std::string* detail = nullptr);
 
@@ -146,7 +157,7 @@ class Channel {
  private:
   friend class Manager;
   std::shared_ptr<detail::Shared> shared_;
-  Kind kind_ = Kind::Offline;
+  std::string group_, engine_;
 };
 
 class Manager {
@@ -163,9 +174,10 @@ class Manager {
   Manager(const Manager&) = delete;
   Manager& operator=(const Manager&) = delete;
 
-  // 채널 1개를 점유한다. 마지막 점검 후 점검 주기(기본 60초)가 지났으면 먼저 파일을 재적재·재판정한다.
-  // Grace 상태에서도 Ok를 반환한다(경고는 Snapshot().state로 판단).
-  Error Acquire(Kind kind, Channel* out);
+  // allowed_channels.<group>.<engine> 의 채널 1개를 점유한다. 세부 항목 상한과 total 상한을 모두 지켜야 한다.
+  // 마지막 점검 후 점검 주기(기본 60초)가 지났으면 먼저 파일을 재적재·재판정한다.
+  // 실패: NotYetValid / Expired / EngineNotLicensed(라이선스에 없거나 상한 0) / ChannelLimit(세부 항목 또는 total 소진).
+  Error Acquire(const std::string& group, const std::string& engine, Channel* out);
 
   // 점검 주기와 무관하게 즉시 파일을 재적재한다. 실패하면 기존 라이선스를 유지하고 오류를 반환한다.
   Error Reload();
@@ -173,8 +185,9 @@ class Manager {
   // 현재 상태. Acquire와 같은 조건으로 지연 점검을 수행한다.
   Info Snapshot();
 
-  // 현재 라이선스의 채널 한도 (세션 풀 크기 결정용).
-  int MaxChannels(Kind kind);
+  // 현재 라이선스의 채널 한도 (세션 풀 크기 결정용). 라이선스에 없는 항목·세부 항목은 0.
+  int MaxChannels(const std::string& group, const std::string& engine);
+  int TotalChannels();
 
  private:
   explicit Manager(std::shared_ptr<detail::Shared> shared);

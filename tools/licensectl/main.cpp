@@ -227,14 +227,38 @@ std::string SafeName(const std::string& s) {
   return r;
 }
 
+std::string EngineList(const std::map<std::string, int>& m) {
+  std::string r;
+  for (const auto& [name, n] : m) r += (r.empty() ? "" : " ") + name + "=" + std::to_string(n);
+  return r.empty() ? "-" : r;
+}
+
+namespace json = stt::license::json;
+
+// allowed_channels 의 항목들(total 제외): { 항목: { 세부 항목: 상한 } }
+json::Value GroupsObject(const std::map<std::string, std::map<std::string, int>>& groups) {
+  json::Value o;
+  for (const auto& [group, items] : groups) {
+    json::Value g;
+    for (const auto& [name, n] : items) g.Set(name, json::MakeInt(n));
+    o.Set(group, std::move(g));
+  }
+  return o;
+}
+
 void PrintSummary(const lic::LicenseData& d, int64_t at) {
+  std::printf("license_ver    : %d\n", d.license_ver);
   std::printf("license_id     : %s\n", d.license_id.c_str());
   std::printf("project_name   : %s\n", d.project_name.c_str());
   std::printf("license_type   : %s\n", d.license_type.c_str());
+  std::printf("solution       : %s\n", d.solution.c_str());
   std::printf("site_id        : %s\n", d.site_id.c_str());
-  std::printf("channels       : online_stt=%d offline_stt=%d\n", d.online, d.offline);
-  std::printf("valid          : %s ~ %s (grace until %s)\n", lic::FormatUtcTime(d.not_before).c_str(),
-              lic::FormatUtcTime(d.not_after).c_str(), lic::FormatUtcTime(d.GraceUntil()).c_str());
+  std::printf("channels total : %d\n", d.total);
+  for (const auto& [group, items] : d.groups) {
+    std::printf("  %-12s : %s\n", group.c_str(), EngineList(items).c_str());
+  }
+  std::printf("valid          : %s ~ %s\n", lic::FormatUtcTime(d.not_before).c_str(),
+              lic::FormatUtcTime(d.not_after).c_str());
   std::printf("state at %s: %s\n", lic::FormatUtcTime(at).c_str(), lic::StateName(d.StateAt(at)));
 }
 
@@ -266,7 +290,6 @@ int Issue(const std::map<std::string, std::string>& flags) {
     date.erase(std::remove(date.begin(), date.end(), '-'), date.end());
     const std::string copy = dir + "/" + date + "_" + SafeName(d.site_id) + "_" +
                              SafeName(d.license_id) + ".lic";
-    namespace json = stt::license::json;
     json::Value row;
     const char* user = std::getenv("USER");
     row.Set("issued_by", json::MakeString(user && *user ? user : "unknown"));
@@ -275,8 +298,10 @@ int Issue(const std::map<std::string, std::string>& flags) {
     row.Set("project_name", json::MakeString(d.project_name));
     row.Set("site_id", json::MakeString(d.site_id));
     row.Set("license_type", json::MakeString(d.license_type));
-    row.Set("online_stt", json::MakeInt(d.online));
-    row.Set("offline_stt", json::MakeInt(d.offline));
+    row.Set("license_ver", json::MakeInt(d.license_ver));
+    row.Set("solution", json::MakeString(d.solution));
+    row.Set("total", json::MakeInt(d.total));
+    row.Set("channels", GroupsObject(d.groups));
     row.Set("not_after", json::MakeString(lic::FormatUtcTime(d.not_after)));
     row.Set("file", json::MakeString(copy));
     if (!WriteNew(copy, text, 0600, &err) ||
@@ -307,10 +332,9 @@ int Verify(const std::map<std::string, std::string>& flags, const std::vector<st
   lic::Error e = lic::ParseAndVerify(bytes, pub.data(), &d, &detail);
   const bool as_json = flags.count("json") > 0;
   const lic::State st = e == lic::Error::Ok ? d.StateAt(at) : lic::State::Expired;
-  const int code = (e == lic::Error::Ok && (st == lic::State::Valid || st == lic::State::Grace)) ? 0 : 1;
+  const int code = (e == lic::Error::Ok && st == lic::State::Valid) ? 0 : 1;
 
   if (as_json) {  // 한 줄 JSON (서버 연동용). 값은 모두 서명 검증을 통과한 뒤에만 채운다.
-    namespace json = stt::license::json;
     json::Value o;
     o.Set("result", json::MakeString(lic::ErrorName(e)));
     o.Set("checked_at", json::MakeString(lic::FormatUtcTime(at)));
@@ -322,13 +346,13 @@ int Verify(const std::map<std::string, std::string>& flags, const std::vector<st
       o.Set("project_name", json::MakeString(d.project_name));
       o.Set("license_type", json::MakeString(d.license_type));
       o.Set("site_id", json::MakeString(d.site_id));
-      o.Set("online_stt", json::MakeInt(d.online));
-      o.Set("offline_stt", json::MakeInt(d.offline));
+      o.Set("license_ver", json::MakeInt(d.license_ver));
+      o.Set("solution", json::MakeString(d.solution));
+      o.Set("total", json::MakeInt(d.total));
+      o.Set("channels", GroupsObject(d.groups));
       o.Set("issued_at", json::MakeString(lic::FormatUtcTime(d.issued_at)));
       o.Set("not_before", json::MakeString(lic::FormatUtcTime(d.not_before)));
       o.Set("not_after", json::MakeString(lic::FormatUtcTime(d.not_after)));
-      o.Set("grace_period_days", json::MakeInt(d.grace_days));
-      o.Set("grace_until", json::MakeString(lic::FormatUtcTime(d.GraceUntil())));
     }
     if (!WriteStdout(json::Canonicalize(o) + "\n")) return Fail("cannot write stdout");
     return code;

@@ -7,7 +7,7 @@ public class SttHarness {
   }
 
   /** 0 = 성공, 1000+ = 라이선스 오류(stt::license::Error 순번), 그 외 = SDK 오류. */
-  public native int connect(String licensePath, int sonasttSessions, int whisperSessions);
+  public native int connect(String licensePath, int sonasttSessions, int sonaasrSessions);
 
   /** {"result":0,"session_id":"..."} 또는 {"result":code,"error":"...","message":"..."} */
   public native String getIdleSession(String engine);

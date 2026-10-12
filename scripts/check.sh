@@ -42,15 +42,25 @@ else
     || { echo "licensectl did not warn about insecure key permissions"; exit 1; }
 fi
 if "$L" keygen -out "$W/keys" 2>/dev/null; then echo "keygen overwrote keys"; exit 1; fi
-mk() {  # mk <name> <offline> <not_before> <not_after>
-  sed -e "s/\"offline_stt\": 8/\"offline_stt\": $2/" -e "s/2026-09-21T00:00:00Z/$3/" -e "s/2027-09-20T23:59:59Z/$4/" \
-    "$ROOT/core/testdata/contract.example.json" > "$W/$1.json"
+mk() {  # mk <name> <license_type> <total> <offline sonastt> <offline sonaasr|-> <not_before> <not_after>
+  python3 - "$ROOT/core/testdata/contract.example.json" "$@" > "$W/$1.json" <<'PY'
+import json, sys
+src, name, typ, total, stt, asr, nb, na = sys.argv[1:]
+c = json.load(open(src, encoding="utf-8"))
+c["license_type"] = typ
+c["allowed_channels"] = {"total": int(total), "offline": {"sonastt": int(stt)}, "online": {}}
+if asr != "-": c["allowed_channels"]["offline"]["sonaasr"] = int(asr)
+c["validity"] = {"not_before": nb, "not_after": na}
+print(json.dumps(c, ensure_ascii=False))
+PY
   "$L" issue -key "$W/keys/private.key" -in "$W/$1.json" -out "$W/$1.lic" -ledger "$W/ledger" >/dev/null
 }
-mk valid 3 2020-01-01T00:00:00Z 2099-12-31T23:59:59Z
-mk more 5 2020-01-01T00:00:00Z 2099-12-31T23:59:59Z
-mk expired 3 2020-01-01T00:00:00Z 2020-12-31T23:59:59Z
-sed 's/"offline_stt": 3/"offline_stt": 30/' "$W/valid.lic" > "$W/tampered.lic"
+P=9999-12-31T23:59:59Z   # 운영(production) = 영구
+mk valid production 3 3 3 2020-01-01T00:00:00Z $P
+mk more production 5 5 5 2020-01-01T00:00:00Z $P
+mk reduced production 5 1 - 2020-01-01T00:00:00Z $P     # 갱신으로 축소: sonastt 1, sonaasr 제외
+mk expired trial 3 3 3 2020-01-01T00:00:00Z 2020-12-31T23:59:59Z
+sed 's/"total": 3/"total": 30/' "$W/valid.lic" > "$W/tampered.lic"
 # 보조 평면 문자(이모지) + 한글이 든 라이선스: JNI 문자열 변환(변형 UTF-8 함정) 검증용
 python3 - "$W/valid.json" > "$W/emoji.json" <<'PY'
 import json, sys
@@ -65,7 +75,19 @@ printf -- '--license-verify-mode=FULL\n' > "$W/bad.cfg"
 "$L" verify -pub "$W/keys/public.key" "$W/valid.lic" >/dev/null
 if "$L" verify -pub "$W/keys/public.key" "$W/tampered.lic" >/dev/null; then echo "tampered verified"; exit 1; fi
 if "$L" verify -pub "$W/keys/public.key" "$W/expired.lic" >/dev/null; then echo "expired verified"; exit 1; fi
-[ "$(wc -l < "$W/ledger/ledger.jsonl")" = 3 ] || { echo "ledger rows"; exit 1; }
+[ "$(wc -l < "$W/ledger/ledger.jsonl")" = 4 ] || { echo "ledger rows"; exit 1; }
+# 이전 형식(format_version) 계약은 발급 거부, 운영 라이선스에 종료일을 주면 발급 거부(발급 정책)
+python3 - "$W/valid.json" > "$W/legacy.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1])); c["format_version"] = 1
+print(json.dumps(c, ensure_ascii=False))
+PY
+out=$("$L" issue -key "$W/keys/private.key" -in "$W/legacy.json" -out "$W/legacy.lic" 2>&1 || true)
+grep -q "legacy format key" <<<"$out" || { echo "legacy contract accepted: $out"; exit 1; }
+sed 's/9999-12-31T23:59:59Z/2030-01-01T00:00:00Z/' "$W/valid.json" > "$W/prod-dated.json"
+out=$("$L" issue -key "$W/keys/private.key" -in "$W/prod-dated.json" -out "$W/prod-dated.lic" 2>&1 || true)
+grep -q "production licenses must be permanent" <<<"$out" || { echo "dated production accepted: $out"; exit 1; }
+[ ! -e "$W/legacy.lic" ] && [ ! -e "$W/prod-dated.lic" ] || { echo "rejected contract wrote a license"; exit 1; }
 # 키 혼동 방지: 비밀키를 공개키 자리에, 공개키를 발급 키 자리에 쓰면 거부
 # (pipefail 이므로 기대된 실패 코드를 파이프에 넣지 않고 출력을 먼저 받는다)
 out=$("$L" verify -pub "$W/keys/private.key" "$W/valid.lic" 2>&1 || true)
@@ -77,7 +99,7 @@ grep -q "not a licensectl private key" <<<"$out" || { echo "public key accepted 
 python3 - "$W/valid.json" > "$W/fixed.json" <<'PY'
 import json, sys
 c = json.load(open(sys.argv[1]))
-c.update({"format_version": 1, "license_id": "0123456789abcdef0123456789abcdef"})
+c.update({"license_ver": 1, "license_id": "0123456789abcdef0123456789abcdef"})
 c["validity"]["issued_at"] = "2026-01-01T00:00:00Z"
 print(json.dumps(c, ensure_ascii=False))
 PY
@@ -87,9 +109,24 @@ cmp -s "$W/fixed-issue.lic" "$W/fixed-sign.lic" || { echo "sign output differs f
 [ "$("$L" pubkey < "$W/keys/private.key")" = "$(cat "$W/keys/public.key")" ] || { echo "pubkey mismatch"; exit 1; }
 out=$("$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - < "$W/fixed-sign.lic" || true)
 grep -q '"result":"OK"' <<<"$out" || { echo "verify -json failed: $out"; exit 1; }
-out=$(sed 's/"offline_stt": 3/"offline_stt": 30/' "$W/fixed-sign.lic" | "$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - || true)
+out=$(sed 's/"total": 3/"total": 30/' "$W/fixed-sign.lic" | "$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - || true)
 grep -q '"result":"LICENSE_BAD_SIGNATURE"' <<<"$out" || { echo "tampered verify -json: $out"; exit 1; }
-echo "keygen/issue/verify/ledger/sign/pubkey/verify -json OK"
+# allowed_channels 항목은 이름 자유(total 제외): 사용자 정의 항목 발급·검증, 항목 값이 객체가 아니면 거부
+python3 - "$W/valid.json" > "$W/custom.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))
+c["allowed_channels"] = {"total": 4, "batch_gpu": {"sonastt": 2, "sonaml": 1}, "streaming": {"sonaasr": 3}}
+print(json.dumps(c, ensure_ascii=False))
+PY
+"$L" issue -key "$W/keys/private.key" -in "$W/custom.json" -out "$W/custom.lic" >/dev/null
+out=$("$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - < "$W/custom.lic")
+grep -q '"channels":{"batch_gpu":{"sonaml":1,"sonastt":2},"streaming":{"sonaasr":3}}' <<<"$out" \
+  || { echo "custom groups verify -json: $out"; exit 1; }
+sed 's/"streaming": {"sonaasr": 3}/"streaming": 3/' "$W/custom.json" > "$W/custom-bad.json"
+grep -q '"streaming": 3' "$W/custom-bad.json" || { echo "custom-bad.json not rewritten"; exit 1; }
+out=$("$L" issue -key "$W/keys/private.key" -in "$W/custom-bad.json" -out "$W/custom-bad.lic" 2>&1 || true)
+grep -q "allowed_channels.streaming: must be an object" <<<"$out" || { echo "non-object group accepted: $out"; exit 1; }
+echo "keygen/issue/verify/ledger/sign/pubkey/verify -json/custom groups OK"
 
 step "4. JNI 하네스 빌드 (정적 OpenSSL, JNI 심볼만 export)"
 cmake -S "$ROOT" -B "$B/harness" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTT_LICENSE_BUILD_TESTS=OFF \
@@ -183,6 +220,7 @@ grep -qF "\"$(cat "$W/keys/public.key")\"" "$B/relkey/generated/stt_license_embe
   || { echo "relative -D key path resolved against the wrong directory"; exit 1; }
 echo "[relative-D] 상대 경로 -D 는 실행 디렉터리 기준으로 해석"
 # 부모가 일반 변수로 상대 경로를 주면 기준이 모호하므로 구성 단계에서 거부
+rm -rf "$B/consumer-relnormal"   # 구성 실패 시험: 이전 캐시를 남기지 않음
 if cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-relnormal" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
      -DMOCK_PUBLIC_KEY=keys/public.key >"$B/consumer-relnormal.log" 2>&1 \
    || ! grep -q "must be an absolute path" "$B/consumer-relnormal.log"; then
@@ -196,6 +234,8 @@ if cmake --build "$B/consumer-nokey" >"$B/consumer-nokey.log" 2>&1 || ! grep -q 
 fi
 echo "[nokey] 키 누락 시 명확한 빌드 오류 확인"
 # 비밀키를 공개키로 지정하면 구성 단계에서 중단 (비밀키가 SDK 바이너리에 내장·배포되는 사고 방지)
+# 구성이 실패하는 시험이라 이전 실행의 캐시가 남는다(다른 생성기로 만든 캐시면 엉뚱한 오류) → 매번 새로
+rm -rf "$B/consumer-privkey"
 if cmake -S "$ROOT/integration/cmake-consumer" -B "$B/consumer-privkey" -G Ninja -DSTT_LICENSE_SOURCE_DIR="$ROOT" \
      -DSTT_LICENSE_PUBLIC_KEY_FILE="$W/keys/private.key" >"$B/consumer-privkey.log" 2>&1 \
    || ! grep -q "is a PRIVATE key" "$B/consumer-privkey.log"; then

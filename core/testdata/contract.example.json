@@ -1,15 +1,23 @@
 {
   "project_name": "STT Platform Modernization",
   "license_type": "production",
+  "solution": "sonastt-universal",
   "site_id": "SEOUL-MAIN-DC",
   "allowed_channels": {
-    "online_stt": 16,
-    "offline_stt": 8
+    "total": 16,
+    "offline": {
+      "sonastt": 8,
+      "sonaml": 4,
+      "sonaasr": 4
+    },
+    "online": {
+      "sonastt": 8,
+      "sonaasr": 2
+    }
   },
   "validity": {
     "not_before": "2026-09-21T00:00:00Z",
-    "not_after": "2027-09-20T23:59:59Z",
-    "grace_period_days": 14
+    "not_after": "9999-12-31T23:59:59Z"
   },
   "warning_notice": "This software license is geographically restricted to the designated site. Unauthorized replication or exceeding allowed channels is strictly prohibited."
 }

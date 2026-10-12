@@ -3,7 +3,10 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <map>
 #include <mutex>
+#include <set>
+#include <utility>
 
 #include "detail.h"
 #include "json.h"
@@ -17,7 +20,8 @@ struct Shared {
   std::string path;
   std::string loaded_raw;  // 현재 적용 중인 라이선스 파일 바이트
   LicenseData lic;
-  int used[2] = {0, 0};
+  std::map<std::pair<std::string, std::string>, int> used;  // (항목, 세부 항목) → 사용 중 채널 수
+  int used_total = 0;                                       // 모든 세부 항목 합 (total 상한 대상)
   int64_t last_check = 0;
   Error last_reload_error = Error::Ok;
 };
@@ -26,8 +30,6 @@ struct Shared {
 namespace {
 
 using detail::Shared;
-
-int Idx(Kind k) { return k == Kind::Online ? 0 : 1; }
 
 // 일반 파일만 읽는다. FIFO·장치 파일이면 읽기가 무기한 멈출 수 있고(Acquire 가 뮤텍스를 쥔 채로),
 // O_CLOEXEC 가 없으면 읽는 동안 fork 된 자식(JVM 의 ProcessBuilder 등)에 fd 가 샌다.
@@ -95,13 +97,14 @@ void MaybeRecheckLocked(Shared* s, int64_t now) {
 // ---- Channel ----
 
 Channel::Channel(Channel&& other) noexcept
-    : shared_(std::move(other.shared_)), kind_(other.kind_) {}
+    : shared_(std::move(other.shared_)), group_(std::move(other.group_)), engine_(std::move(other.engine_)) {}
 
 Channel& Channel::operator=(Channel&& other) noexcept {
   if (this != &other) {
     Release();
     shared_ = std::move(other.shared_);
-    kind_ = other.kind_;
+    group_ = std::move(other.group_);
+    engine_ = std::move(other.engine_);
   }
   return *this;
 }
@@ -112,8 +115,11 @@ void Channel::Release() noexcept {
   if (!shared_) return;
   {
     std::lock_guard<std::mutex> lock(shared_->mu);
-    int& used = shared_->used[Idx(kind_)];
-    if (used > 0) --used;
+    auto it = shared_->used.find({group_, engine_});
+    if (it != shared_->used.end() && it->second > 0) {
+      if (--it->second == 0) shared_->used.erase(it);
+      if (shared_->used_total > 0) --shared_->used_total;
+    }
   }
   shared_.reset();
 }
@@ -135,7 +141,7 @@ Error Manager::OpenWith(const std::string& path, const detail::Config& config,
   return Error::Ok;
 }
 
-Error Manager::Acquire(Kind kind, Channel* out) {
+Error Manager::Acquire(const std::string& group, const std::string& engine, Channel* out) {
   out->Release();  // 잠금 전에: 같은 Manager의 채널이면 mu를 다시 잡기 때문
   Shared* s = shared_.get();
   std::lock_guard<std::mutex> lock(s->mu);
@@ -144,14 +150,20 @@ Error Manager::Acquire(Kind kind, Channel* out) {
   switch (s->lic.StateAt(now)) {
     case State::NotYetValid: return Error::NotYetValid;
     case State::Expired: return Error::Expired;
-    case State::Valid:
-    case State::Grace: break;
+    case State::Valid: break;
   }
-  int& used = s->used[Idx(kind)];
-  if (used >= s->lic.Max(kind)) return Error::ChannelLimit;
-  ++used;
+  const int cap = s->lic.Max(group, engine);
+  if (cap <= 0) return Error::EngineNotLicensed;
+  const std::pair<std::string, std::string> key{group, engine};
+  auto it = s->used.find(key);
+  const int used = it == s->used.end() ? 0 : it->second;
+  // 라이선스가 축소 교체되면 used 가 상한보다 클 수 있다: 사용 중인 채널은 유지하고 신규만 거부한다.
+  if (used >= cap || s->used_total >= s->lic.total) return Error::ChannelLimit;
+  ++s->used[key];
+  ++s->used_total;
   out->shared_ = shared_;
-  out->kind_ = kind;
+  out->group_ = group;
+  out->engine_ = engine;
   return Error::Ok;
 }
 
@@ -163,11 +175,18 @@ Error Manager::Reload() {
   return LoadLocked(s, now, true);
 }
 
-int Manager::MaxChannels(Kind kind) {
+int Manager::MaxChannels(const std::string& group, const std::string& engine) {
   Shared* s = shared_.get();
   std::lock_guard<std::mutex> lock(s->mu);
   MaybeRecheckLocked(s, s->cfg.now());
-  return s->lic.Max(kind);
+  return s->lic.Max(group, engine);
+}
+
+int Manager::TotalChannels() {
+  Shared* s = shared_.get();
+  std::lock_guard<std::mutex> lock(s->mu);
+  MaybeRecheckLocked(s, s->cfg.now());
+  return s->lic.total;
 }
 
 Info Manager::Snapshot() {
@@ -180,15 +199,23 @@ Info Manager::Snapshot() {
   i.license_id = l.license_id;
   i.project_name = l.project_name;
   i.license_type = l.license_type;
+  i.solution = l.solution;
   i.site_id = l.site_id;
-  i.online_max = l.online;
-  i.offline_max = l.offline;
-  i.online_used = s->used[0];
-  i.offline_used = s->used[1];
+  i.total_max = l.total;
+  i.total_used = s->used_total;
+  // 라이선스에 있는 세부 항목 + (교체로 빠졌지만) 아직 사용 중인 세부 항목. 항목·세부 항목 이름순.
+  std::set<std::pair<std::string, std::string>> keys;
+  for (const auto& [group, items] : l.groups) {
+    for (const auto& [name, n] : items) keys.insert({group, name});
+  }
+  for (const auto& [key, n] : s->used) keys.insert(key);
+  for (const auto& key : keys) {
+    auto it = s->used.find(key);
+    i.engines.push_back({key.first, key.second, l.Max(key.first, key.second), it == s->used.end() ? 0 : it->second});
+  }
   i.issued_at = l.issued_at;
   i.not_before = l.not_before;
   i.not_after = l.not_after;
-  i.grace_until = l.GraceUntil();
   i.checked_at = now;
   i.state = l.StateAt(now);
   i.last_reload_error = s->last_reload_error;
@@ -200,20 +227,26 @@ Info Manager::Snapshot() {
 std::string InfoToJson(const Info& i) {
   using json::MakeInt;
   using json::MakeString;
+  auto usage = [](int max, int used) {
+    json::Value u;
+    u.Set("max", MakeInt(max));
+    u.Set("used", MakeInt(used));
+    return u;
+  };
   json::Value ch, root;
-  ch.Set("online_max", MakeInt(i.online_max));
-  ch.Set("online_used", MakeInt(i.online_used));
-  ch.Set("offline_max", MakeInt(i.offline_max));
-  ch.Set("offline_used", MakeInt(i.offline_used));
+  ch.Set("total", usage(i.total_max, i.total_used));
+  std::map<std::string, json::Value> groups;
+  for (const ChannelUsage& e : i.engines) groups[e.group].Set(e.engine, usage(e.max, e.used));
+  for (auto& [group, items] : groups) ch.Set(group, std::move(items));
   root.Set("license_id", MakeString(i.license_id));
   root.Set("project_name", MakeString(i.project_name));
   root.Set("license_type", MakeString(i.license_type));
+  root.Set("solution", MakeString(i.solution));
   root.Set("site_id", MakeString(i.site_id));
   root.Set("channels", std::move(ch));
   root.Set("issued_at", MakeString(FormatUtcTime(i.issued_at)));
   root.Set("not_before", MakeString(FormatUtcTime(i.not_before)));
   root.Set("not_after", MakeString(FormatUtcTime(i.not_after)));
-  root.Set("grace_until", MakeString(FormatUtcTime(i.grace_until)));
   root.Set("checked_at", MakeString(FormatUtcTime(i.checked_at)));
   root.Set("state", MakeString(StateName(i.state)));
   root.Set("last_reload_error", MakeString(ErrorName(i.last_reload_error)));
@@ -233,6 +266,7 @@ const char* ErrorName(Error e) {
     case Error::Expired: return "LICENSE_EXPIRED";
     case Error::ChannelLimit: return "LICENSE_CHANNEL_LIMIT";
     case Error::Internal: return "LICENSE_INTERNAL_ERROR";
+    case Error::EngineNotLicensed: return "LICENSE_ENGINE_NOT_LICENSED";
   }
   return "LICENSE_UNKNOWN_ERROR";
 }
@@ -252,14 +286,16 @@ const char* ErrorMessage(Error e) {
     case Error::InvalidField:
       return "License contents are invalid. Contact the vendor for a reissued license.";
     case Error::UnsupportedVersion:
-      return "License format is newer than this engine supports. Upgrade the engine or "
-             "request a compatible license.";
+      return "License format is not supported by this engine (legacy format_version license, or a "
+             "newer license_ver). Request a license in the supported format.";
     case Error::NotYetValid:
       return "License is not valid yet (before not_before). Check the host clock.";
     case Error::Expired:
-      return "License and grace period have expired. Install a renewed license.";
-    case Error::ChannelLimit: return "All licensed channels are in use.";
+      return "License has expired (after not_after). Install a renewed license.";
+    case Error::ChannelLimit: return "All licensed channels (engine or total) are in use.";
     case Error::Internal: return "Internal license error (embedded key or crypto failure).";
+    case Error::EngineNotLicensed:
+      return "This channel item is not licensed (not in allowed_channels or limit 0). Check the license.";
   }
   return "Unknown license error.";
 }
@@ -268,7 +304,6 @@ const char* StateName(State s) {
   switch (s) {
     case State::NotYetValid: return "NOT_YET_VALID";
     case State::Valid: return "VALID";
-    case State::Grace: return "GRACE";
     case State::Expired: return "EXPIRED";
   }
   return "UNKNOWN";

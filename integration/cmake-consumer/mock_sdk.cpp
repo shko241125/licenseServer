@@ -15,6 +15,6 @@ extern "C" __attribute__((visibility("default"))) int mock_connect(const char* p
 extern "C" __attribute__((visibility("default"))) int mock_acquire_release() {
   if (!g_manager) return -1;
   stt::license::Channel ch;
-  stt::license::Error e = g_manager->Acquire(stt::license::Kind::Offline, &ch);
+  stt::license::Error e = g_manager->Acquire("offline", "sonastt", &ch);
   return e == stt::license::Error::Ok ? 0 : 1000 + static_cast<int>(e);
 }

@@ -56,10 +56,17 @@ TEST(VerifySignature, ValuesComeOnlyFromSignedTree) {
   std::int64_t n = 0;
   EXPECT_TRUE(v.GetString("site_id", &s));
   EXPECT_EQ(s, "SEOUL-MAIN-DC");
-  EXPECT_TRUE(v.GetInt("allowed_channels.offline_stt", &n));
-  EXPECT_EQ(n, 8);
+  EXPECT_TRUE(v.GetInt("allowed_channels.total", &n));
+  EXPECT_EQ(n, 16);
+  EXPECT_TRUE(v.GetInt("allowed_channels.offline.sonaml", &n));
+  EXPECT_EQ(n, 4);
+  EXPECT_TRUE(v.GetInt("allowed_channels.online.sonaasr", &n));
+  EXPECT_EQ(n, 2);
+  EXPECT_FALSE(v.GetInt("allowed_channels.online.sonaml", &n));   // 온라인에는 없는 엔진
+  EXPECT_TRUE(v.GetString("solution", &s));
+  EXPECT_EQ(s, "sonastt-universal");
   EXPECT_TRUE(v.GetString("validity.not_after", &s));
-  EXPECT_EQ(s, "2027-09-20T23:59:59Z");
+  EXPECT_EQ(s, "9999-12-31T23:59:59Z");
   EXPECT_TRUE(v.Has("allowed_channels"));
   EXPECT_FALSE(v.Has("signature"));                       // 서명 값 자체는 노출하지 않음
   EXPECT_FALSE(v.GetString("allowed_channels", &s));      // 객체는 문자열이 아님
@@ -86,12 +93,12 @@ TEST(VerifySignature, CanonicalJsonMatchesGolden) {
 // 공통 코어는 서명만 본다: 규격을 벗어난 값도 서명이 맞으면 Ok, 판정은 SDK 가 선택적으로 한다.
 TEST(VerifySignature, SignatureOnlyAcceptsNonStandardValues) {
   const std::string odd = SignRaw(
-      "{\"format_version\":7,\"allowed_channels\":{\"offline_stt\":999999},"
+      "{\"license_ver\":7,\"allowed_channels\":{\"total\":999999},"
       "\"validity\":{\"not_after\":\"sometime\"},\"custom\":{\"legacy_mode\":true}}");
   lic::VerifiedLicense v = VerifyOk(odd);
   std::int64_t n = 0;
   bool b = false;
-  EXPECT_TRUE(v.GetInt("allowed_channels.offline_stt", &n));
+  EXPECT_TRUE(v.GetInt("allowed_channels.total", &n));
   EXPECT_EQ(n, 999999);
   EXPECT_TRUE(v.GetBool("custom.legacy_mode", &b));
   EXPECT_TRUE(b);
@@ -108,7 +115,7 @@ TEST(VerifySignature, SignatureOnlyAcceptsNonStandardValues) {
 TEST(VerifySignature, Rejections) {
   const std::string text = Issue(Contract{});
   lic::VerifiedLicense v;
-  EXPECT_EQ(Verify(Replace(text, "\"offline_stt\": 8", "\"offline_stt\": 80"), &v), Error::BadSignature);
+  EXPECT_EQ(Verify(Replace(text, "\"sonastt\": 8", "\"sonastt\": 16"), &v), Error::BadSignature);
   EXPECT_FALSE(v.valid());                                                   // 실패하면 결과를 채우지 않음
   EXPECT_EQ(Verify(text, &v, TestSeed(77)), Error::BadSignature);            // 다른 키
   EXPECT_EQ(Verify(std::string(lic::kMaxFileSize + 1, ' '), &v), Error::FileTooLarge);
@@ -138,17 +145,23 @@ TEST(VerifySignature, StandardFieldsAndState) {
   lic::VerifiedLicense v = VerifyOk(Issue(Contract{}));
   lic::LicenseFields f;
   ASSERT_EQ(lic::ParseStandardFields(v, &f), Error::Ok);
-  EXPECT_EQ(f.format_version, 1);
+  EXPECT_EQ(f.license_ver, 1);
   EXPECT_EQ(f.site_id, "SEOUL-MAIN-DC");
-  EXPECT_EQ(f.online_stt, 16);
-  EXPECT_EQ(f.offline_stt, 8);
-  EXPECT_EQ(f.grace_period_days, 14);
+  EXPECT_EQ(f.solution, "sonastt-universal");
+  EXPECT_EQ(f.total_channels, 16);
+  EXPECT_EQ(f.channels, (std::map<std::string, std::map<std::string, int>>{
+                            {"offline", {{"sonastt", 8}, {"sonaml", 4}, {"sonaasr", 4}}},
+                            {"online", {{"sonastt", 8}, {"sonaasr", 2}}}}));
+  EXPECT_EQ(f.not_after, T("9999-12-31T23:59:59Z"));
+
+  lic::VerifiedLicense tv = VerifyOk(Issue(Contract::Trial()));
+  ASSERT_EQ(lic::ParseStandardFields(tv, &f), Error::Ok);
   const std::int64_t na = T("2027-09-20T23:59:59Z");
   EXPECT_EQ(f.not_after, na);
   EXPECT_EQ(lic::StateAt(f, T("2026-09-20T23:59:59Z")), lic::State::NotYetValid);
   EXPECT_EQ(lic::StateAt(f, na), lic::State::Valid);
-  EXPECT_EQ(lic::StateAt(f, na + 1), lic::State::Grace);
-  EXPECT_EQ(lic::StateAt(f, na + 14 * 86400 + 1), lic::State::Expired);
+  EXPECT_EQ(lic::StateAt(f, na + 1), lic::State::Expired);  // 유예 없음
+  EXPECT_STREQ(lic::StateName(lic::StateAt(f, na + 1)), "EXPIRED");
 }
 
 // ---- 값 검증 포함(VerifyLicense) / 모드 선택(Verify) ----
@@ -161,36 +174,43 @@ Error Full(const std::string& text, int64_t now, lic::VerifiedLicense* v, lic::L
 }
 
 TEST(VerifyLicense, PeriodAndFieldsAreEnforced) {
-  const std::string text = Issue(Contract{});  // 2026-09-21 ~ 2027-09-20T23:59:59Z, 유예 14일
+  const std::string text = Issue(Contract::Trial());  // 2026-09-21 ~ 2027-09-20T23:59:59Z, 유예 없음
   lic::VerifiedLicense v;
   lic::LicenseFields f;
   std::string detail;
   EXPECT_EQ(Full(text, T("2026-09-20T23:59:59Z"), &v, &f, &detail), Error::NotYetValid);
   EXPECT_FALSE(v.valid());                                   // 실패하면 결과를 채우지 않음
   EXPECT_NE(detail.find("2026-09-21T00:00:00Z"), std::string::npos);
-  EXPECT_EQ(Full(text, T("2027-10-04T23:59:59Z"), &v, &f), Error::Ok);   // 유예 마지막 순간
+  EXPECT_EQ(Full(text, T("2027-09-20T23:59:59Z"), &v, &f), Error::Ok);   // 종료 순간까지 유효
   EXPECT_TRUE(v.valid());
-  EXPECT_EQ(lic::StateAt(f, T("2027-10-04T23:59:59Z")), lic::State::Grace);
   lic::VerifiedLicense v2;
-  EXPECT_EQ(Full(text, T("2027-10-05T00:00:00Z"), &v2, nullptr, &detail), Error::Expired);
+  EXPECT_EQ(Full(text, T("2027-09-21T00:00:00Z"), &v2, nullptr, &detail), Error::Expired);  // 다음 1초에 만료
   EXPECT_FALSE(v2.valid());
-  EXPECT_EQ(Full(Replace(text, "\"offline_stt\": 8", "\"offline_stt\": 9"), T("2027-01-01T00:00:00Z"), &v2, nullptr),
+  EXPECT_NE(detail.find("2027-09-20T23:59:59Z"), std::string::npos) << detail;
+  EXPECT_EQ(Full(Replace(text, "\"sonastt\": 8", "\"sonastt\": 9"), T("2027-01-01T00:00:00Z"), &v2, nullptr),
             Error::BadSignature);                            // 서명 검증이 먼저
   const std::string missing = SignRaw(Replace(Contract{}.Json(), "\"site_id\":\"SEOUL-MAIN-DC\",", ""));
   EXPECT_EQ(Full(missing, T("2027-01-01T00:00:00Z"), &v2, nullptr), Error::InvalidField);
+  // 운영(영구) 라이선스는 먼 미래에도 유효
+  EXPECT_EQ(Full(Issue(Contract{}), T("9999-12-31T23:59:59Z"), &v2, nullptr), Error::Ok);
 }
 
 // 하나의 진입점: 모드별 결과가 각각의 분리 함수와 정확히 같아야 한다.
 TEST(VerifyMode, SingleEntryMatchesSeparateFunctions) {
   auto pub = PublicOf(TestSeed());
-  Contract old;
+  Contract old = Contract::Trial("2020-12-31T23:59:59Z");
   old.not_before = "2020-01-01T00:00:00Z";
-  old.not_after = "2020-12-31T23:59:59Z";
   const std::string expired = Issue(old);
-  const std::string nonstandard = SignRaw("{\"format_version\":7,\"allowed_channels\":{\"offline_stt\":999999}}");
+  const std::string nonstandard = SignRaw("{\"license_ver\":7,\"allowed_channels\":{\"total\":999999}}");
+  // 이전 형식(format_version 1) 라이선스: 서명만 모드는 통과, 전체 모드는 UnsupportedVersion
+  const std::string legacy = SignRaw(
+      "{\"format_version\":1,\"license_id\":\"0123456789abcdef0123456789abcdef\",\"project_name\":\"p\","
+      "\"license_type\":\"production\",\"site_id\":\"s\",\"allowed_channels\":{\"online_stt\":1,\"offline_stt\":1},"
+      "\"validity\":{\"issued_at\":\"2026-09-21T00:00:00Z\",\"not_before\":\"2026-09-21T00:00:00Z\","
+      "\"not_after\":\"2027-09-20T23:59:59Z\",\"grace_period_days\":14},\"warning_notice\":\"n\"}");
   const std::string valid = Issue(Contract{});
   const int64_t now = T("2027-01-01T00:00:00Z");
-  for (const std::string* text : {&valid, &expired, &nonstandard}) {
+  for (const std::string* text : {&valid, &expired, &nonstandard, &legacy}) {
     for (lic::VerifyMode mode : {lic::VerifyMode::SignatureOnly, lic::VerifyMode::Full}) {
       lic::VerifiedLicense a, b;
       Error ea = lic::VerifyWith(*text, mode, pub.data(), now, &a, nullptr, nullptr);
@@ -207,6 +227,9 @@ TEST(VerifyMode, SingleEntryMatchesSeparateFunctions) {
   EXPECT_EQ(lic::VerifyWith(expired, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr), Error::Expired);
   EXPECT_EQ(lic::VerifyWith(nonstandard, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
   EXPECT_EQ(lic::VerifyWith(nonstandard, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
+            Error::UnsupportedVersion);
+  EXPECT_EQ(lic::VerifyWith(legacy, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
+  EXPECT_EQ(lic::VerifyWith(legacy, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
             Error::UnsupportedVersion);
   // SignatureOnly 는 fields 를 건드리지 않는다
   lic::LicenseFields f;

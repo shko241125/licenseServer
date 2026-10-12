@@ -100,21 +100,32 @@ TEST(License, IssueAndVerifyRoundTrip) {
   std::string text = Issue(c);
   lic::LicenseData d;
   ASSERT_EQ(Verify(text, &d), Error::Ok);
-  EXPECT_EQ(d.format_version, 1);
+  EXPECT_EQ(d.license_ver, 1);
   EXPECT_EQ(d.license_id, c.license_id);
   EXPECT_EQ(d.project_name, c.project_name);
   EXPECT_EQ(d.license_type, "production");
+  EXPECT_EQ(d.solution, "sonastt-universal");
   EXPECT_EQ(d.site_id, "SEOUL-MAIN-DC");
-  EXPECT_EQ(d.online, 16);
-  EXPECT_EQ(d.offline, 8);
+  EXPECT_EQ(d.total, 16);
+  EXPECT_EQ(d.groups, (std::map<std::string, std::map<std::string, int>>{
+                          {"offline", {{"sonastt", 8}, {"sonaml", 4}, {"sonaasr", 4}}},
+                          {"online", {{"sonastt", 8}, {"sonaasr", 2}}}}));
+  EXPECT_EQ(d.Max("offline", "sonaml"), 4);
+  EXPECT_EQ(d.Max("online", "sonaml"), 0);   // 온라인에는 없는 세부 항목
+  EXPECT_EQ(d.Max("streaming", "sonastt"), 0);  // 없는 항목
   EXPECT_EQ(d.not_before, T("2026-09-21T00:00:00Z"));
-  EXPECT_EQ(d.not_after, T("2027-09-20T23:59:59Z"));
-  EXPECT_EQ(d.grace_days, 14);
+  EXPECT_EQ(d.not_after, T("9999-12-31T23:59:59Z"));
   EXPECT_EQ(d.warning_notice, c.warning_notice);
-  // 사람이 읽을 수 있는 형태: 원문 §3 순서, signature 마지막
-  EXPECT_EQ(text.rfind("{\n  \"format_version\": 1,\n  \"license_id\"", 0), 0u) << text;
-  EXPECT_NE(text.find("  \"allowed_channels\": {\n    \"online_stt\": 16,\n    \"offline_stt\": 8\n  },"),
-            std::string::npos);
+  // 사람이 읽을 수 있는 형태: 요구 예시 순서(엔진 포함), signature 마지막
+  EXPECT_EQ(text.rfind("{\n  \"license_ver\": 1,\n  \"license_id\"", 0), 0u) << text;
+  EXPECT_NE(text.find("  \"license_type\": \"production\",\n  \"solution\": \"sonastt-universal\",\n"
+                      "  \"site_id\": \"SEOUL-MAIN-DC\",\n"),
+            std::string::npos) << text;
+  EXPECT_NE(text.find("  \"allowed_channels\": {\n    \"total\": 16,\n    \"offline\": {\n"
+                      "      \"sonastt\": 8,\n      \"sonaml\": 4,\n      \"sonaasr\": 4\n    },\n"
+                      "    \"online\": {\n      \"sonastt\": 8,\n      \"sonaasr\": 2\n    }\n  },"),
+            std::string::npos) << text;
+  EXPECT_EQ(text.find("grace"), std::string::npos);
   EXPECT_NE(text.find(",\n  \"signature\": \""), std::string::npos);
   EXPECT_EQ(text.back(), '\n');
 }
@@ -122,16 +133,18 @@ TEST(License, IssueAndVerifyRoundTrip) {
 TEST(License, DetectsTampering) {
   const std::string text = Issue(Contract{});
   const std::vector<std::pair<std::string, std::string>> edits = {
-      {"\"online_stt\": 16", "\"online_stt\": 17"},
-      {"\"offline_stt\": 8", "\"offline_stt\": 16"},
-      {"2027-09-20T23:59:59Z", "2028-09-20T23:59:59Z"},
-      {"\"grace_period_days\": 14", "\"grace_period_days\": 90"},
+      {"\"total\": 16", "\"total\": 17"},
+      {"\"sonaml\": 4", "\"sonaml\": 5"},
+      {"\"sonaasr\": 2", "\"sonaasr\": 3"},
+      {"9999-12-31T23:59:59Z", "9999-12-30T23:59:59Z"},
+      {"sonastt-universal", "sonastt-universaL"},
       {"SEOUL-MAIN-DC", "BUSAN-DC"},
       {"STT Platform", "STT PlatforM"},
       {"strictly prohibited.", "strictly prohibited!"},
       {"\"production\"", "\"trial\""},
-      {"\"format_version\": 1,", "\"format_version\": 1, \"extra\": 1,"},  // 필드 추가
-      {"  \"site_id\": \"SEOUL-MAIN-DC\",\n", ""},                         // 필드 삭제
+      {"\"license_ver\": 1,", "\"license_ver\": 1, \"extra\": 1,"},     // 필드 추가
+      {"\"offline\": {\n", "\"offline\": {\n      \"sonanew\": 1,\n"},   // 엔진 추가
+      {"  \"site_id\": \"SEOUL-MAIN-DC\",\n", ""},                       // 필드 삭제
   };
   for (const auto& [from, to] : edits) {
     Error e = Verify(Replace(text, from, to));
@@ -146,7 +159,7 @@ TEST(License, FormattingDoesNotMatter) {
   ASSERT_TRUE(lic::json::Parse(text, &v, &err));
   // 키 순서 뒤섞기 + 공백 제거
   EXPECT_EQ(Verify(lic::json::Canonicalize(v)), Error::Ok);
-  EXPECT_EQ(Verify(lic::json::Pretty(v, {"signature", "validity", "site_id"})), Error::Ok);
+  EXPECT_EQ(Verify(lic::json::Pretty(v, {"signature", "validity", "site_id", "online"})), Error::Ok);
   // CRLF, BOM, 앞뒤 공백
   std::string crlf;
   for (char ch : text) {
@@ -183,10 +196,11 @@ TEST(License, SignatureFormat) {
 
 TEST(License, StrictParsing) {
   const std::string text = Issue(Contract{});
-  EXPECT_EQ(Verify(Replace(text, "\"online_stt\": 16", "\"online_stt\": 16, \"online_stt\": 16")),
-            Error::ParseError);
-  EXPECT_EQ(Verify(Replace(text, "\"online_stt\": 16", "\"online_stt\": 16.0")), Error::ParseError);
-  EXPECT_EQ(Verify(Replace(text, "\"online_stt\": 16", "\"online_stt\": -16")), Error::ParseError);
+  EXPECT_EQ(Verify(Replace(text, "\"total\": 16", "\"total\": 16, \"total\": 16")), Error::ParseError);
+  EXPECT_EQ(Verify(Replace(text, "\"total\": 16", "\"total\": 16.0")), Error::ParseError);
+  EXPECT_EQ(Verify(Replace(text, "\"total\": 16", "\"total\": -16")), Error::ParseError);
+  EXPECT_EQ(Verify(Replace(text, "\"sonaml\": 4", "\"SonaML\": 4")), Error::ParseError);  // 엔진 이름 규칙
+  EXPECT_EQ(Verify(Replace(text, "\"sonaml\": 4", "\"sona-ml\": 4")), Error::ParseError);
   EXPECT_EQ(Verify(text + "{}"), Error::ParseError);
   EXPECT_EQ(Verify("[]"), Error::ParseError);
   EXPECT_EQ(Verify("\"x\""), Error::ParseError);
@@ -199,66 +213,119 @@ TEST(License, SchemaValidationAfterSignature) {
   auto signed_json = [&](const std::string& from, const std::string& to) {
     return SignRaw(Replace(c.Json(), from, to));
   };
-  // 서명은 맞지만 내용이 규격 위반
-  EXPECT_EQ(Verify(signed_json("\"format_version\":1", "\"format_version\":2")),
-            Error::UnsupportedVersion);
-  EXPECT_EQ(Verify(signed_json("\"format_version\":1,", "")), Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("\"format_version\":1", "\"format_version\":\"1\"")),
-            Error::InvalidField);
+  const std::string ver = "\"license_ver\":1,";
+  // 형식 버전: 다른 값·없음·타입 오류·이전 형식
+  EXPECT_EQ(Verify(signed_json("\"license_ver\":1", "\"license_ver\":2")), Error::UnsupportedVersion);
+  EXPECT_EQ(Verify(signed_json(ver, "")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"license_ver\":1", "\"license_ver\":\"1\"")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json(ver, "\"format_version\":1,")), Error::UnsupportedVersion);  // 이전 형식
+  {
+    std::string detail;
+    lic::LicenseData d;
+    auto pub = PublicOf(TestSeed());
+    ASSERT_EQ(lic::ParseAndVerify(signed_json(ver, "\"format_version\":1,"), pub.data(), &d, &detail),
+              Error::UnsupportedVersion);
+    EXPECT_NE(detail.find("legacy"), std::string::npos) << detail;
+  }
+  // 문자열 필드
   EXPECT_EQ(Verify(signed_json("\"site_id\":\"SEOUL-MAIN-DC\",", "")), Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("\"site_id\":\"SEOUL-MAIN-DC\"", "\"site_id\":\"\"")),
-            Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"site_id\":\"SEOUL-MAIN-DC\"", "\"site_id\":\"\"")), Error::InvalidField);
   EXPECT_EQ(Verify(signed_json("SEOUL-MAIN-DC", "SEOUL\\nMAIN")), Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("\"online_stt\":16", "\"online_stt\":\"16\"")), Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("\"online_stt\":16", "\"online_stt\":100001")), Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("\"online_stt\":16,\"offline_stt\":8",
-                               "\"online_stt\":0,\"offline_stt\":0")),
-            Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("\"grace_period_days\":14", "\"grace_period_days\":91")),
-            Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("2027-09-20T23:59:59Z", "2027-09-20T23:59:59+09:00")),
-            Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json("2027-09-20T23:59:59Z", "2026-09-21T00:00:00Z")),
-            Error::InvalidField);  // not_before == not_after
-  EXPECT_EQ(Verify(signed_json("\"allowed_channels\":{", "\"allowed_channels\":true,\"x\":{")),
-            Error::InvalidField);
-  // 모르는 필드는 서명에 포함되어 있으면 허용 (신규 발급기 ↔ 구버전 SDK 호환)
-  EXPECT_EQ(Verify(signed_json("\"format_version\":1,", "\"format_version\":1,\"future_field\":{\"x\":1},")),
-            Error::Ok);
-  // 한 채널 종류만 0 인 것은 허용
-  EXPECT_EQ(Verify(signed_json("\"online_stt\":16", "\"online_stt\":0")), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("\"solution\":\"sonastt-universal\",", "")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("sonastt-universal", std::string(128, 's'))), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("sonastt-universal", std::string(129, 's'))), Error::InvalidField);
+  // total
+  EXPECT_EQ(Verify(signed_json("\"total\":16", "\"total\":\"16\"")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"total\":16", "\"total\":0")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"total\":16,", "")), Error::InvalidField);
+  // 엔진: 값 ≤ total, 범위, 타입, 객체 필수, 빈 객체 허용, 엔진 수 상한
+  EXPECT_EQ(Verify(signed_json("\"sonastt\":8,\"sonaml\"", "\"sonastt\":16,\"sonaml\"")), Error::Ok);   // = total
+  EXPECT_EQ(Verify(signed_json("\"sonastt\":8,\"sonaml\"", "\"sonastt\":17,\"sonaml\"")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"sonaml\":4", "\"sonaml\":\"4\"")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"sonaml\":4", "\"sonaml\":true")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"sonaml\":4", "\"sonaml\":{\"x\":1}")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"online\":{\"sonastt\":8,\"sonaasr\":2}", "\"online\":{}")), Error::Ok);
+  // 항목은 이름 자유: offline·online 은 필수가 아니고, 다른 항목을 둘 수 있다
+  EXPECT_EQ(Verify(signed_json(",\"online\":{\"sonastt\":8,\"sonaasr\":2}", "")), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("\"offline\":{\"sonastt\":8,\"sonaml\":4,\"sonaasr\":4},", "")), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("\"online\":{", "\"streaming\":{\"sonastt\":2},\"online\":{")), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("\"online\":{", "\"streaming\":3,\"online\":{")), Error::InvalidField);   // 항목 값은 객체
+  EXPECT_EQ(Verify(signed_json("\"online\":{", "\"streaming\":{\"a\":{\"b\":1}},\"online\":{")), Error::InvalidField);  // 2단까지
+  EXPECT_EQ(Verify(signed_json("\"online\":{", "\"streaming\":{\"a\":17},\"online\":{")), Error::InvalidField);  // > total
+  EXPECT_EQ(Verify(signed_json("\"online\":{", "\"streaming\":{},\"online\":{")), Error::Ok);   // 빈 항목 허용
+  EXPECT_EQ(Verify(signed_json("\"total\":16,\"offline\":{\"sonastt\":8,\"sonaml\":4,\"sonaasr\":4},"
+                               "\"online\":{\"sonastt\":8,\"sonaasr\":2}", "\"total\":16")),
+            Error::InvalidField);  // 항목이 하나도 없음
+  EXPECT_EQ(Verify(signed_json("\"online\":{\"sonastt\":8,\"sonaasr\":2}", "\"online\":true")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("\"sonaml\":4", "\"sonaml\":0")), Error::Ok);  // 0 은 허용(사용 안 함)
+  {
+    std::string offline64, offline65;
+    for (int i = 0; i < 65; ++i) {
+      std::string e = "\"e" + std::to_string(100 + i) + "\":1";
+      if (i < 64) offline64 += (i ? "," : "") + e;
+      offline65 += (i ? "," : "") + e;
+    }
+    const std::string from = "\"offline\":{\"sonastt\":8,\"sonaml\":4,\"sonaasr\":4}";
+    EXPECT_EQ(Verify(signed_json(from, "\"offline\":{" + offline64 + "}")), Error::Ok);
+    EXPECT_EQ(Verify(signed_json(from, "\"offline\":{" + offline65 + "}")), Error::InvalidField);
+  }
+  {  // 항목 수 상한 64 (total 제외)
+    Contract c64, c65;
+    for (int i = 0; i < 62; ++i) c64.extra.push_back({"g" + std::to_string(100 + i), {{"e", 1}}});
+    c65 = c64;
+    c65.extra.push_back({"g999", {{"e", 1}}});
+    EXPECT_EQ(Verify(SignRaw(c64.Json())), Error::Ok);           // offline + online + 62 = 64
+    EXPECT_EQ(Verify(SignRaw(c65.Json())), Error::InvalidField);
+  }
+  // 모든 엔진이 0 이면 쓸모없는 라이선스
+  {
+    Contract z;
+    z.offline = {{"sonastt", 0}};
+    z.online = {};
+    EXPECT_EQ(Verify(SignRaw(z.Json())), Error::InvalidField);
+    z.online = {{"sonaasr", 1}};
+    EXPECT_EQ(Verify(SignRaw(z.Json())), Error::Ok);
+  }
+  // 기간
+  EXPECT_EQ(Verify(signed_json("9999-12-31T23:59:59Z", "9999-12-31T23:59:59+09:00")), Error::InvalidField);
+  EXPECT_EQ(Verify(signed_json("9999-12-31T23:59:59Z", "9999-12-310T23:59:59Z")), Error::InvalidField);  // 요구 예시의 오타
+  EXPECT_EQ(Verify(signed_json("9999-12-31T23:59:59Z", "2026-09-21T00:00:00Z")), Error::InvalidField);  // not_before == not_after
+  EXPECT_EQ(Verify(signed_json("\"allowed_channels\":{", "\"allowed_channels\":true,\"x\":{")), Error::InvalidField);
+  // 모르는 필드는 서명에 포함되어 있으면 허용 (신규 발급기 ↔ 구버전 SDK 호환). 유예 키도 무시된다.
+  EXPECT_EQ(Verify(signed_json(ver, ver + "\"future_field\":{\"x\":1},")), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("\"not_after\":", "\"grace_period_days\":14,\"not_after\":")), Error::Ok);
 }
 
 TEST(License, StateBoundaries) {
   lic::LicenseData d;
-  ASSERT_EQ(Verify(Issue(Contract{}), &d), Error::Ok);
+  ASSERT_EQ(Verify(Issue(Contract::Trial()), &d), Error::Ok);
   const int64_t nb = T("2026-09-21T00:00:00Z"), na = T("2027-09-20T23:59:59Z");
   EXPECT_EQ(d.StateAt(nb - 1), State::NotYetValid);
   EXPECT_EQ(d.StateAt(nb), State::Valid);
   EXPECT_EQ(d.StateAt(na), State::Valid);
-  EXPECT_EQ(d.StateAt(na + 1), State::Grace);
-  EXPECT_EQ(d.StateAt(na + 14 * 86400), State::Grace);
-  EXPECT_EQ(d.StateAt(na + 14 * 86400 + 1), State::Expired);
+  EXPECT_EQ(d.StateAt(na + 1), State::Expired);  // 유예 없음
 
-  Contract c0;
-  c0.grace = 0;
-  ASSERT_EQ(Verify(Issue(c0), &d), Error::Ok);
-  EXPECT_EQ(d.StateAt(na), State::Valid);
-  EXPECT_EQ(d.StateAt(na + 1), State::Expired);
+  // 운영(영구): 9999-12-31T23:59:59Z 까지 유효
+  ASSERT_EQ(Verify(Issue(Contract{}), &d), Error::Ok);
+  const int64_t perm = T("9999-12-31T23:59:59Z");
+  EXPECT_EQ(perm, 253402300799LL);
+  EXPECT_EQ(d.StateAt(T("2100-01-01T00:00:00Z")), State::Valid);
+  EXPECT_EQ(d.StateAt(perm), State::Valid);
+  EXPECT_EQ(d.StateAt(perm + 1), State::Expired);
 }
 
 TEST(License, SignContractDefaultsAndChecks) {
   auto seed = TestSeed();
   std::string text, detail;
   lic::LicenseData d;
-  // format_version, license_id, issued_at 생략 → 채워짐
+  // license_ver, license_id, issued_at 생략 → 채워짐
   std::string minimal = Contract{}.Json();
-  minimal = Replace(minimal, "\"format_version\":1,", "");
+  minimal = Replace(minimal, "\"license_ver\":1,", "");
   minimal = Replace(minimal, "\"license_id\":\"0123456789abcdef0123456789abcdef\",", "");
   minimal = Replace(minimal, "\"issued_at\":\"2026-09-21T00:00:00Z\",", "");
   const int64_t now = T("2026-09-20T12:34:56Z");
   ASSERT_EQ(lic::SignContract(minimal, seed.data(), now, &text, &d, &detail), Error::Ok) << detail;
-  EXPECT_EQ(d.format_version, 1);
+  EXPECT_EQ(d.license_ver, 1);
   EXPECT_EQ(d.license_id.size(), 32u);
   EXPECT_EQ(d.license_id.find_first_not_of("0123456789abcdef"), std::string::npos);
   EXPECT_EQ(d.issued_at, now);
@@ -268,17 +335,41 @@ TEST(License, SignContractDefaultsAndChecks) {
   ASSERT_EQ(lic::SignContract(minimal, seed.data(), now, &text2, &d2, &detail), Error::Ok);
   EXPECT_NE(d.license_id, d2.license_id);  // 발급마다 새 ID
 
+  auto sign = [&](const std::string& json) {
+    detail.clear();
+    return lic::SignContract(json, seed.data(), now, &text, &d, &detail);
+  };
   Contract bad_type;
   bad_type.license_type = "enterprise";
-  EXPECT_EQ(lic::SignContract(bad_type.Json(), seed.data(), now, &text, &d, &detail),
+  EXPECT_EQ(sign(bad_type.Json()), Error::InvalidField);
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1", "\"license_ver\":1,\"signature\":\"x\"")),
             Error::InvalidField);
-  const std::string with_sig = Replace(Contract{}.Json(), "\"format_version\":1",
-                                       "\"format_version\":1,\"signature\":\"x\"");
-  EXPECT_EQ(lic::SignContract(with_sig, seed.data(), now, &text, &d, &detail), Error::InvalidField);
-  EXPECT_EQ(lic::SignContract("{", seed.data(), now, &text, &d, &detail), Error::ParseError);
-  Contract inverted;
-  inverted.not_after = "2026-01-01T00:00:00Z";
-  EXPECT_EQ(lic::SignContract(inverted.Json(), seed.data(), now, &text, &d, &detail),
+  EXPECT_EQ(sign("{"), Error::ParseError);
+  Contract inverted = Contract::Trial("2026-01-01T00:00:00Z");
+  EXPECT_EQ(sign(inverted.Json()), Error::InvalidField);
+
+  // 발급 정책: 운영은 영구, 시험·PoC 는 실제 종료일
+  EXPECT_EQ(sign(Contract::Trial().Json()), Error::Ok) << detail;
+  Contract prod_dated;
+  prod_dated.not_after = "2027-09-20T23:59:59Z";
+  EXPECT_EQ(sign(prod_dated.Json()), Error::InvalidField);
+  EXPECT_NE(detail.find("permanent"), std::string::npos) << detail;
+  Contract trial_perm = Contract::Trial("9999-12-31T23:59:59Z");
+  EXPECT_EQ(sign(trial_perm.Json()), Error::InvalidField);
+  Contract poc_perm = trial_perm;
+  poc_perm.license_type = "poc";
+  EXPECT_EQ(sign(poc_perm.Json()), Error::InvalidField);
+
+  // 이전 형식 키가 섞인 계약은 거부 (검증기는 무시하므로 서명하면 오해를 부른다)
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"format_version\":1,")), Error::InvalidField);
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"license_ver\":1,\"format_version\":1,")),
+            Error::InvalidField);
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"not_after\":", "\"grace_period_days\":14,\"not_after\":")),
+            Error::InvalidField);
+  EXPECT_NE(detail.find("grace_period_days"), std::string::npos) << detail;
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"total\":16,", "\"total\":16,\"offline_stt\":8,")),
+            Error::InvalidField);
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"total\":16,", "\"total\":16,\"online_stt\":8,")),
             Error::InvalidField);
 }
 

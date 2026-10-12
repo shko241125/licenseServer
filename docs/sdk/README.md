@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 버전 | 1.1.2 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
+| 버전 | 2.0.0 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
 | 대상 | STT SDK(C++/JNI, `libsonastt_jni_v2.so`) 개발자, STT 서버(Java) 개발자, 현장 설치 엔지니어 |
 | 받는 것 | 이 패키지(소스·문서·검증 도구) + 발급 담당이 주는 **공개키 파일 `public.key`**(Base64 44자) |
 | 받지 않는 것 | 비밀키, 발급 서버. 라이선스 발급은 발급 담당(사내 발급 서버)이 합니다 |
@@ -79,20 +79,23 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 - 부모 프로젝트 C++14/C++20
 - 공개 헤더 C++11~20 `-Wpedantic -Werror`
 
-## 5. 정책 결정 현황 (2026-09-30)
+## 5. 정책 결정 현황 (2026-10-06)
 
 | 항목 | 상태 |
 |---|---|
 | 코어의 책임 | **서명 검증은 공통.** 값(`allowed_channels`, `validity` 등) 사용·판정은 SDK가 결정 |
 | 검증 수준 | `signature`(기본, 기존 SDK와의 호환 장치 — SDK의 별도 만료 장치 적용) / `full`(표준 필드·기간까지 코어 규칙으로). 설정 키 예 `--license-verify-mode` |
 | 라이선스 갱신 방식 | **미정(추후 결정)** — 세션·채널 수 반영 등 분석 필요(02-integration.md §8). 현재는 서버 재시작 |
-| 채널 의미 | `offline_stt` = sonastt-offline + whisper-offline **동시 사용 합계**, `online_stt` = 향후 스트리밍 엔진용 |
+| 라이선스 형식 | `license_ver` 1(2026-10-06). 이전 형식(`format_version`)은 `full`·Manager에서 `1006` — 재발급 |
+| 채널 의미 | `allowed_channels.total` = 모든 항목·세부 항목의 **동시 세션 합계 상한**. 나머지는 이름 자유 항목 `"항목": {"세부 항목": 상한}`(예: `offline`, `online`) |
+| 기간 | 운영(`production`)은 영구(`9999-12-31T23:59:59Z`), 시험·PoC는 실제 종료일. **유예 기간 없음** |
 | 기존 `.key` | 새 모듈로는 검증되지 않음(1003). 공존하려면 SDK가 기존 경로로 분기(02-integration.md §6) |
 
 ## 6. 변경 이력
 
 | 버전 | 내용 |
 |---|---|
+| 2.0.0 | **라이선스 형식 변경(호환 깨짐):** `license_ver` 1, `solution`, `allowed_channels.total` + 이름 자유 항목별 세부 항목 상한(항목·항목당 세부 항목 각 64개 이하), 유예 기간 삭제(`State::Grace` 제거). `Kind` 삭제, `LicenseFields::channels`·`Info`·`Manager::Acquire(group, engine, …)`/`MaxChannels(group, engine)`/`TotalChannels()` API 변경, 오류 `1011 LICENSE_ENGINE_NOT_LICENSED` 추가. 이전 형식은 `1006`. 발급 정책(운영 영구) 강제. 골든 파일 재생성(공개키 동일) |
 | 1.1.2 | **1.1.1 회귀 수정:** `-D`의 상대 경로가 절대 경로로 바뀌지 않아 라이브러리 디렉터리 기준으로 읽혔고, 그 자리의 다른 키가 내장될 수 있었음. 부모 일반 변수가 `-D`보다 우선하도록 보장, 일반 변수 상대 경로 거부, 키 경로 회귀 시험 3종, 내장 키 확인 절차(01-build.md §6.5) |
 | 1.1.1 | 부모가 `STT_LICENSE_PUBLIC_KEY_FILE`·`STT_LICENSE_CRYPTO_TARGET`을 **일반 변수**로 지정하면 서브프로젝트에서 지워지던 문제 수정(CMP0126). 공개키 주입 방법론 문서화(01-build.md §6), 헤드리스 JDK에서 JNI 하네스 빌드 수정 |
 | 1.1.0 | 서명 전용 API(`VerifySignature`, `VerifiedLicense`), 값 검증 포함 `VerifyLicense`, 모드 선택 `Verify(VerifyMode)`, `Utf16ToUtf8`(JNI 문자열), `ParseStandardFields`/`StateAt`. CMake 서브프로젝트 지원, `stt_license_harden_shared_library()`, 공개 헤더 C++11 호환, 비밀키 오지정 차단, FIFO 경로 무기한 대기 수정 |

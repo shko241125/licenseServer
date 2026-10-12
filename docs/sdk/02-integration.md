@@ -26,17 +26,17 @@ createSonaSTT(cb, configFile, hostLicense) ──▶  connect(cb, configFile, ho
 | 함수 | 하는 일 | 실패 코드 |
 |---|---|---|
 | `VerifySignature(text, &license, &detail)` | **서명만**: 크기(64 KiB), BOM 제거, 엄격 JSON, `signature` 형식(표준 Base64·64바이트), Ed25519 | `FileTooLarge`, `ParseError`, `BadSignature`, `Internal`(내장 키 손상) |
-| `VerifyLicense(text, &license, &fields, &detail)` | 서명 + 표준 필드(필수·범위·`format_version`) + **기간**(시스템 시각). 유예 기간은 성공 | 위 + `InvalidField`, `UnsupportedVersion`, `NotYetValid`, `Expired` |
+| `VerifyLicense(text, &license, &fields, &detail)` | 서명 + 표준 필드(필수·범위·`license_ver`) + **기간**(시스템 시각) | 위 + `InvalidField`, `UnsupportedVersion`, `NotYetValid`, `Expired` |
 | `Verify(text, mode, &license, &fields, &detail)` | `SignatureOnly`면 `VerifySignature`, `Full`이면 `VerifyLicense`와 **결과가 완전히 같음** | 모드에 따름 |
 | `ParseVerifyMode("signature"/"full", &mode)` / `VerifyModeName(mode)` | 설정 문자열 ↔ 모드. 그 외 문자열이면 `false` | — |
-| `license.GetString/GetInt/GetBool(path, &out)`, `Has(path)` | 서명된 내용에서 값 조회. 경로는 점으로 구분(`"allowed_channels.offline_stt"`). 없거나 타입이 다르면 `false` | — |
+| `license.GetString/GetInt/GetBool(path, &out)`, `Has(path)` | 서명된 내용에서 값 조회. 경로는 점으로 구분(`"allowed_channels.offline.sonastt"`). 없거나 타입이 다르면 `false` | — |
 | `license.canonical_json()` | 서명 대상 바이트(정규 JSON). SDK의 JSON 라이브러리로 직접 해석해도 됨 | — |
 | `ParseStandardFields(license, &fields)` | 표준 규칙으로 필드 해석(선택 도우미) | `InvalidField`, `UnsupportedVersion` |
-| `StateAt(fields, now)` | `NotYetValid` / `Valid` / `Grace` / `Expired` | — |
+| `StateAt(fields, now)` | `NotYetValid` / `Valid` / `Expired`(유예 기간 없음) | — |
 | `Utf16ToUtf8(ptr, len, &out)` | UTF-16 → 표준 UTF-8. 짝 없는 서로게이트면 `false` | — |
 | `ErrorName(e)` / `ErrorMessage(e)` | `"LICENSE_BAD_SIGNATURE"` / 현장 조치 문구(영문) | — |
 
-`LicenseFields`: `format_version`, `license_id`, `project_name`, `license_type`, `site_id`, `warning_notice`, `online_stt`, `offline_stt`, `issued_at`, `not_before`, `not_after`(UTC epoch 초), `grace_period_days`.
+`LicenseFields`: `license_ver`, `license_id`, `project_name`, `license_type`, `solution`, `site_id`, `warning_notice`, `total_channels`, `channels`(`std::map<std::string, std::map<std::string, int>>`, 항목 → 세부 항목 → 상한. 항목 이름은 자유, 예: `offline`·`online`), `issued_at`, `not_before`, `not_after`(UTC epoch 초).
 
 ## 3. `jstring` → UTF-8: `GetStringUTFChars`를 쓰면 안 된다
 
@@ -114,12 +114,13 @@ JNIEXPORT jint JNICALL Java_<패키지>_<클래스>_connect(JNIEnv* env, jobject
 | 설정(`--license-verify-mode`) | 동작 | 용도 |
 |---|---|---|
 | 없음 또는 `signature` | 서명만. 만료된 라이선스도 서명이 맞으면 통과 | **기본.** 기존 SDK와의 호환 장치 — 기간은 SDK의 별도 만료 장치가 적용 |
-| `full` | 서명 + 표준 필드 + 기간(미개시 `1007`, 만료 `1008`, 유예는 통과) | 코어 규칙을 그대로 쓸 때 |
+| `full` | 서명 + 표준 필드 + 기간(미개시 `1007`, 만료 `1008`) | 코어 규칙을 그대로 쓸 때 |
 | 그 외(오타 포함, 대소문자 구분) | 연결 거부 | 조용히 약한 검증으로 넘어가지 않게 |
 
 `signature` 모드의 전제(2026-09-30 결정 검토):
 - 받아 주는 것은 **새 형식(서명된 JSON)** 라이선스뿐입니다.
 - SDK의 별도 만료 장치가 **새 형식 라이선스로 연결할 때도** 실제로 걸리는지 확인해야 합니다. 그 장치가 기존 `.key`에서 만료일을 읽는 구조라면, `license.GetString("validity.not_after", …)` 값을 넘겨야 합니다.
+- 그 장치가 운영 라이선스의 영구 값 `9999-12-31T23:59:59Z`를 처리하는지도 확인합니다. UTC 64비트 epoch로 비교해야 합니다. 현지 시각 변환·32비트 `time_t`·`mktime`류를 쓰면 범위를 넘을 수 있습니다(04-license-format.md §4 "다른 언어·도구").
 
 ## 6. 기존 라이선스(`sonaLicense.*.key`)와 공존
 
@@ -144,10 +145,13 @@ if (e == lic::Error::ParseError && legacy_enabled) {
 ## 7. 값 사용 (SDK 정책 예)
 
 ```cpp
-std::int64_t offline;
-if (license.GetInt("allowed_channels.offline_stt", &offline)) {
-  // offline_stt = sonastt-offline + whisper-offline 동시 사용 합계.
-  // 예) 엔진별 세션 수 = min(cfg num-sessions, offline), 동시 예약 합계 ≤ offline
+std::int64_t total, sonastt;
+if (license.GetInt("allowed_channels.total", &total) &&
+    license.GetInt("allowed_channels.offline.sonastt", &sonastt)) {
+  // total = 모든 항목·세부 항목의 동시 세션 합계 상한, offline.sonastt = 그 세부 항목의 상한.
+  // 예) sonastt 세션 수 = min(cfg num-sessions, sonastt), 동시 예약은 세부 항목 상한과 total 을 모두 지킨다.
+  // 항목 이름은 라이선스마다 정할 수 있으므로, SDK 가 어떤 항목 이름을 읽을지 미리 정해 둔다.
+  // 키가 없으면 그 세부 항목은 허용되지 않은 것(상한 0)으로 본다.
 }
 std::string not_after;
 if (license.GetString("validity.not_after", &not_after)) {
@@ -175,11 +179,12 @@ JNI 반환값은 `1000 + Error 순번`입니다. 순번은 헤더의 `static_ass
 | 1003 | `LICENSE_PARSE_ERROR` | JSON이 아님·규격 위반(기존 `.key` 포함) | 공통 |
 | 1004 | `LICENSE_BAD_SIGNATURE` | 서명 누락·형식 오류·불일치(변조, 다른 키) | 공통 |
 | 1005 | `LICENSE_INVALID_FIELD` | 필수 필드·범위·시각 형식 위반 | full, Manager |
-| 1006 | `LICENSE_UNSUPPORTED_VERSION` | `format_version` 미지원 | full, Manager |
+| 1006 | `LICENSE_UNSUPPORTED_VERSION` | `license_ver` 미지원, 이전 형식(`format_version`) | full, Manager |
 | 1007 | `LICENSE_NOT_YET_VALID` | 시작 전 | full, Manager |
-| 1008 | `LICENSE_EXPIRED` | 유예 기간까지 종료 | full, Manager |
-| 1009 | `LICENSE_CHANNEL_LIMIT` | 채널 한도 초과 | Manager |
+| 1008 | `LICENSE_EXPIRED` | 종료 시각 지남 | full, Manager |
+| 1009 | `LICENSE_CHANNEL_LIMIT` | 세부 항목 상한 또는 `total` 초과 | Manager |
 | 1010 | `LICENSE_INTERNAL_ERROR` | 내장 공개키 손상 등 | 공통 |
+| 1011 | `LICENSE_ENGINE_NOT_LICENSED` | 라이선스에 없거나 상한 0인 항목·세부 항목 | Manager |
 
 ## 10. 구현 규칙
 
@@ -196,8 +201,8 @@ JNI 반환값은 `1000 + Error 순번`입니다. 순번은 헤더의 `static_ass
 
 | SDK 함수 | 동작 |
 |---|---|
-| 연결 | `Manager::Open(path, &mgr)`. 미개시·만료·서명 오류면 실패. 엔진별 세션 수 = `min(cfg, mgr->MaxChannels(Kind::Offline))` |
-| 세션 예약 | `mgr->Acquire(Kind::Offline, &session.channel)`. 한도 초과 `1009`, 만료 `1008` |
+| 연결 | `Manager::Open(path, &mgr)`. 미개시·만료·서명 오류면 실패. 엔진별 세션 수 = `min(cfg, mgr->MaxChannels("offline", "sonastt"))`(항목, 세부 항목). 전체 상한은 `mgr->TotalChannels()` |
+| 세션 예약 | `mgr->Acquire("offline", "sonastt", &session.channel)`. 세부 항목 상한·`total` 초과 `1009`, 라이선스에 없는 항목·세부 항목 `1011`, 만료 `1008` |
 | 작업 종료·중단 | `session.channel.Release()` (또는 세션 객체 소멸, RAII) |
 | 예약 후 작업 미제출 | 예약 타임아웃(권장 60초) 뒤 `Release()` |
 | 상태 조회 | `InfoToJson(mgr->Snapshot())` |

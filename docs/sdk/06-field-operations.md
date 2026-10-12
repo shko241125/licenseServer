@@ -8,7 +8,7 @@
 licensectl verify -pub public.key license.lic                             # 지금 시각 기준
 licensectl verify -pub public.key -at 2027-09-25T00:00:00Z license.lic    # 특정 시각(설치 예정일 등) 기준
 ```
-- 종료 코드: 서명이 맞고 상태가 `VALID`/`GRACE`이면 0, 그 밖에는 1입니다.
+- 종료 코드: 서명이 맞고 상태가 `VALID`이면 0, 그 밖에는 1입니다.
 - `public.key`는 **해당 제품 빌드에 내장된 운영 공개키**여야 합니다. 발급 서버 화면의 검증 기능을 써도 됩니다.
 
 ## 2. 설치 (고객 폐쇄망)
@@ -30,11 +30,12 @@ licensectl verify -pub public.key -at 2027-09-25T00:00:00Z license.lic    # 특�
 | 1003 | `LICENSE_PARSE_ERROR` | JSON 아님·형식 위반(편집 흔적, 기존 `.key`) | 원본 재배치. 기존 `.key`라면 새 형식 라이선스 요청 또는 공존 설정 확인 |
 | 1004 | `LICENSE_BAD_SIGNATURE` | 내용 수정 또는 다른 키로 서명(개발용·타 제품) | 원본 재배치. 계속되면 발급처에 문의(제품 빌드와 발급 키 확인) |
 | 1005 | `LICENSE_INVALID_FIELD` | 필드 규격 위반 | 발급처 재발급 |
-| 1006 | `LICENSE_UNSUPPORTED_VERSION` | 엔진보다 새로운 형식 | 엔진 업그레이드 또는 호환 라이선스 요청 |
+| 1006 | `LICENSE_UNSUPPORTED_VERSION` | 엔진이 모르는 형식(더 새로운 `license_ver`, 또는 이전 형식 `format_version` 발급분) | 이전 형식이면 `license_ver` 1로 재발급, 새 형식이면 엔진 업그레이드 |
 | 1007 | `LICENSE_NOT_YET_VALID` | 시작일 이전 | 호스트 시계(UTC) 확인. 시작일 전 설치라면 대기 |
-| 1008 | `LICENSE_EXPIRED` | 유예 기간까지 종료 | 갱신본 설치 |
-| 1009 | `LICENSE_CHANNEL_LIMIT` | 허용 채널 모두 사용 중 | 정상 동작. 지속되면 채널 증설 계약 |
+| 1008 | `LICENSE_EXPIRED` | 종료 시각 지남(시험·PoC. 운영은 영구) | 갱신본 설치 |
+| 1009 | `LICENSE_CHANNEL_LIMIT` | 세부 항목(엔진) 상한 또는 전체(`total`) 채널 모두 사용 중 | 정상 동작. 지속되면 채널 증설 계약 |
 | 1010 | `LICENSE_INTERNAL_ERROR` | 내장 공개키 손상 등 | 엔진 재설치, 개발사 문의 |
+| 1011 | `LICENSE_ENGINE_NOT_LICENSED` | 라이선스에 없거나 상한 0인 항목·세부 항목 | 엔진 설정과 라이선스의 항목 이름(`licensectl verify`) 확인. 필요하면 해당 항목을 넣어 재발급 |
 
 1007·1008은 `full` 모드에서만 나옵니다. `signature` 모드의 기간 관련 오류는 SDK의 별도 만료 장치가 출력하는 메시지를 따릅니다.
 

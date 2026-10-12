@@ -9,10 +9,11 @@ cmake -S . -B build -G Ninja && cmake --build build --target licensectl
 ./build/licensectl keygen -out build/dev-keys            # public.key / private.key (이미 있으면 실패)
 ./build/licensectl issue -key build/dev-keys/private.key \
     -in core/testdata/contract.example.json -out build/dev.lic
-./build/licensectl verify -pub build/dev-keys/public.key build/dev.lic          # 종료코드 0 = VALID/GRACE
+./build/licensectl verify -pub build/dev-keys/public.key build/dev.lic          # 종료코드 0 = VALID
 ./build/licensectl verify -pub build/dev-keys/public.key -json - < build/dev.lic   # JSON 출력
 ```
-- 계약 JSON(`contract.example.json`)에서 기간·채널을 바꿔 시험용 라이선스를 만듭니다. `format_version`, `license_id`, `issued_at`은 생략하면 자동으로 채워집니다.
+- 계약 JSON(`contract.example.json`)에서 기간·채널을 바꿔 시험용 라이선스를 만듭니다. `license_ver`, `license_id`, `validity.issued_at`은 생략하면 자동으로 채워집니다.
+  - 발급 정책: `production`은 `not_after`가 `9999-12-31T23:59:59Z`(영구)여야 하고, 만료를 시험하려면 `license_type`을 `trial`로 바꿔 실제 종료일을 줍니다(04-license-format.md §2).
 - 개발 키로 빌드한 SDK는 **운영 라이선스를 거부하고, 개발 라이선스를 받아들입니다.** 이 빌드를 배포하지 않습니다(01-build.md §6).
 - 개발 키와 라이선스는 `build/` 아래에 둡니다(git 무시). 저장소 루트의 `private.key`, `/keys/`, `/*.lic`도 무시되지만, 그것에 기대지 않습니다.
 
@@ -60,6 +61,9 @@ WSL에서는 리눅스 파일시스템(예: `~/work`)에 두고 실행합니다.
 | 다른 키로 서명 | 1004 | 1004 |
 | `project_name`에 이모지 포함 | 0 | 0 ← `GetStringUTFChars`를 쓰면 1003 |
 | 빈 문자열 / JSON 아님 | 1003 | 1003 |
+| 이전 형식(`format_version`, 코어 1.x 발급분) | 0 | 1006 |
+| 운영(영구, `not_after` 9999-12-31T23:59:59Z) | 0 (SDK 만료 장치가 만료로 오판하지 않는지 확인) | 0 |
+| `license_id` 없는 새 형식(외부 도구 서명) | 0 | 1005 |
 | 기존 `sonaLicense.*.key` | 공존 설정 on: 기존 경로 성공 / off: 1003 | 동일 |
 | `--license-verify-mode=FULL`(대문자) | 연결 거부 | — |
 
@@ -67,4 +71,7 @@ WSL에서는 리눅스 파일시스템(예: `~/work`)에 두고 실행합니다.
 - [ ] `LD_PRELOAD`로 `EVP_DigestVerify`를 항상 성공시키는 라이브러리를 주입해도 변조 파일이 `1004` (방법: `scripts/check.sh` 6단계의 `fake_verify.c`)
 
 **값 사용**
-- [ ] `offline_stt` = N일 때, 두 엔진 동시 세션 합계가 N을 넘지 않음(SDK 정책대로 적용한 경우)
+- [ ] 엔진 상한(예: `offline.sonastt` = N)을 넘는 동시 세션이 거부됨(`1009`)
+- [ ] 세부 항목 상한이 남아도 모든 항목의 합계가 `total`을 넘으면 거부됨(`1009`)
+- [ ] SDK가 읽는 항목 이름(예: `offline`)이 없는 라이선스(사용자 정의 항목만 있는 라이선스)에서 그 엔진이 거부됨(`1011` 또는 SDK 정책)
+- [ ] 라이선스에 없거나 상한 0인 세부 항목은 거부됨(`1011`, Manager 방식 또는 SDK 정책대로 적용한 경우)
