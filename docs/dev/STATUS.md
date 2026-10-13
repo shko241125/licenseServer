@@ -1,6 +1,6 @@
 # 작업 상태 (STATUS)
 
-- **갱신:** 2026-10-12
+- **갱신:** 2026-10-13
 - **기준:** 이 파일을 갱신한 커밋의 트리(`git log -1 -- docs/dev/STATUS.md`). 이후 커밋이 더 있으면 그 변경을 먼저 확인합니다.
 - 결정과 이유는 [DECISIONS.md](DECISIONS.md), 작업 규칙은 [../../CLAUDE.md](../../CLAUDE.md)를 봅니다.
 
@@ -8,11 +8,11 @@
 
 | 구성 요소 | 상태 | 비고 |
 |---|---|---|
-| 검증 코어 `stt_license` 2.0.0 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11. 공개키 경로 결정 규칙(D29, 1.1.2) — **1.1.1은 상대 `-D` 회귀가 있어 쓰지 않음**. 2.0.0: 라이선스 형식 `license_ver` 1(D34~D36, D38) — `solution`, `total` + **이름 자유 항목**별 세부 항목 상한, 유예 삭제, `1011` 추가, 이전 형식 `1006` |
+| 검증 코어 `stt_license` 2.0.1 | 완료 | 서명 전용 API, `VerifyMode`, `Utf16ToUtf8`, `Manager`. 공개 헤더 C++11. 공개키 경로 결정 규칙(D29, 1.1.2) — **1.1.1은 상대 `-D` 회귀가 있어 쓰지 않음**. 2.0.0: 라이선스 형식 `license_ver` 1(D34~D36, D38) — `solution`, `total` + **이름 자유 항목**별 세부 항목 상한, 유예 삭제, `1011` 추가, 이전 형식 `1006`. 2.0.1: 발급 유형 `production`·`trial`·`dev` 한정(D40, 검증 동작·API 불변) |
 | `licensectl` | 완료 | keygen / issue / verify / sign / pubkey. 2.0.0: 새 형식 요약·`-json`·발급 대장, 발급 정책(운영 영구) 강제, `VALID`일 때만 종료 코드 0 |
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증. 2.0.0: 엔진별 세션 풀(`sonastt`·`sonaasr`), 엔진 상한·`total`·`1011` 시험 |
-| SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~07(07 = 1.x → 2.0.0 업그레이드 안내), `scripts/make-sdk-release.sh`(허용 목록). **2.0.0 정식 발행: 태그 `sdk-v2.0.0`**(첫 태그 발행) |
-| 발급 서버 v1.3 | 완료 | 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정. v1.3: `license_ver` 1 발급(D37, D38) — 마이그레이션 V3(이전 기록 보존·"이전 형식" 표시), (항목, 세부 항목, 상한) 행 입력, 운영 영구, 문자열 길이 UTF-8 바이트 기준으로 수정 |
+| SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~07(07 = 1.x → 2.0.0 업그레이드 안내), `scripts/make-sdk-release.sh`(허용 목록). 정식 발행: 태그 `sdk-v2.0.0`(2026-10-12), **`sdk-v2.0.1`(2026-10-13)** |
+| 발급 서버 v1.4 | 완료 | 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정. v1.3: `license_ver` 1 발급(D37, D38) — 마이그레이션 V3(이전 기록 보존·"이전 형식" 표시), (항목, 세부 항목, 상한) 행 입력, 운영 영구, 문자열 길이 UTF-8 바이트 기준으로 수정. v1.4: 유형 `production`·`trial`·`dev`(D40, DB V4 CHECK), 시험·개발 기간 길이 제한·1년 경고 없음 |
 | 원격 작업 기반 | 완료(클라우드 실측 전) | `CLAUDE.md`, 이 파일, `DECISIONS.md`, `scripts/cloud-setup.sh` |
 | SDK·STT 서버 실제 적용 | **미착수(다른 저장소)** | 계획: `docs/sdk/02-integration.md`, `03-stt-server.md`, 수용 기준 `05-testing.md` §3 |
 
@@ -43,6 +43,10 @@
 | 〃 | 〃 | `scripts/make-sdk-release.sh --worktree --verify` (2.0.0, D38 반영) | 풀어낸 SDK 패키지(42개 파일)만으로 `check.sh` 통과: C++ 단위 53, 사용자 정의 항목 E2E, JNI 결합 51항목, CMake 소비자 10구성 |
 | 2026-10-12 | 로컬 WSL | 요구 예시 JSON 상호 운용성 검토 | 계약 입력으로 발급·검증 통과(`license_id` 자동). **최종 파일에 `license_id`가 없으면 `full`·Manager `1005`**. 외부 서명(Python 정규화 + OpenSSL 3) → 코어 통과, 코어 발급 → JDK·Node 검증 통과. 이전 SDK(1.1.2): `full` `1005`, `signature` 통과·`offline_stt` 없음. 영구 값: KST 변환 시 Python `OverflowError`(서버 Java는 영향 없음). 실수 `1.0` → `1003`, `\uXXXX` 이스케이프 바이트 서명 → `1004` |
 | 2026-10-12 | 로컬 WSL | **SDK 2.0.0 정식 발행** `make-sdk-release.sh --ref sdk-v2.0.0 --verify` | `stt-license-sdk-2.0.0.tar.gz` 43개 파일, 원 커밋 `6cf8475`, SHA-256 `3f9b2b90c81593050f4fd422daf7ca61098ab705f5ea1716972bef4717adc9c5`. 패키지만으로 `check.sh` 통과(C++ 53, JNI 51항목), 재빌드 바이트 동일, 금지 파일 0 |
+| 2026-10-13 | 로컬 WSL | 유형 한정·기간 경고 삭제(D40): C++ 단위·`check.sh` | 53개 통과(`dev` 발급·영구 금지, 목록 밖 값·별칭·대소문자 거부, 검증기는 임의 값 통과), `ALL CHECKS PASSED` |
+| 〃 | 〃 | `./gradlew test` / `integrationTest` | 82개 / 22개 통과(DB CHECK: 세 값 허용, 그 밖 거부. 5년 시험·개발 경고 없음) |
+| 〃 | 시험 스택 재구성(이전 이미지 데이터 → 새 이미지) | 업그레이드·브라우저 E2E | V2 스키마 데이터에서 V3·V4 연속 적용, 행 보존. E2E 26항목 통과(유형 선택 순서, 5년 시험 경고 없음, `dev` 발급·표시), 콘솔 오류 0, 가로 넘침 0. V4 실패 경로(허용 밖 값 존재 → 메시지와 함께 중단·롤백, 정리 후 적용)는 일회용 DB로 확인 |
+| 〃 | 〃 | `make-sdk-release.sh --worktree --verify` (2.0.1 사전 점검) | 통과(43개 파일, 패키지 안 이전 유형 문자열 0). 정식 발행(태그 `sdk-v2.0.1`)은 커밋 후 |
 
 ## 3. 다음 작업 (우선순위)
 
