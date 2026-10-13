@@ -179,7 +179,7 @@ JNI 반환값은 `1000 + Error 순번`입니다. 순번은 헤더의 `static_ass
 | 1003 | `LICENSE_PARSE_ERROR` | JSON이 아님·규격 위반(기존 `.key` 포함) | 공통 |
 | 1004 | `LICENSE_BAD_SIGNATURE` | 서명 누락·형식 오류·불일치(변조, 다른 키) | 공통 |
 | 1005 | `LICENSE_INVALID_FIELD` | 필수 필드·범위·시각 형식 위반 | full, Manager |
-| 1006 | `LICENSE_UNSUPPORTED_VERSION` | `license_ver` 미지원, 이전 형식(`format_version`) | full, Manager |
+| 1006 | `LICENSE_UNSUPPORTED_VERSION` | `license_ver`가 1이 아님(이 엔진이 모르는 버전). `license_ver`가 없으면 `1005` | full, Manager |
 | 1007 | `LICENSE_NOT_YET_VALID` | 시작 전 | full, Manager |
 | 1008 | `LICENSE_EXPIRED` | 종료 시각 지남 | full, Manager |
 | 1009 | `LICENSE_CHANNEL_LIMIT` | 세부 항목 상한 또는 `total` 초과 | Manager |

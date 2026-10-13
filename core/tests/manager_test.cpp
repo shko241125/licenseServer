@@ -74,8 +74,10 @@ TEST_F(ManagerTest, OpenFailures) {
   EXPECT_EQ(Open(&m), Error::Expired);
   EXPECT_EQ(m, nullptr);
 
-  // 이전 형식(format_version) 파일
-  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "\"format_version\":1,")));
+  // license_ver 없는 파일 / 지원하지 않는 license_ver
+  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "")));
+  EXPECT_EQ(Open(&m), Error::InvalidField);
+  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "\"license_ver\":2,")));
   EXPECT_EQ(Open(&m), Error::UnsupportedVersion);
 
   // 일반 파일이 아닌 경로: 디렉터리, FIFO(쓰는 쪽이 없으면 예전 구현은 무기한 대기)
@@ -311,9 +313,9 @@ TEST_F(ManagerTest, BadReplacementKeepsCurrentLicense) {
   EXPECT_EQ(m->Reload(), Error::Expired);
   EXPECT_EQ(m->Snapshot().state, State::Valid);
 
-  // 이전 형식으로의 교체 거부
-  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "\"format_version\":1,")));
-  EXPECT_EQ(m->Reload(), Error::UnsupportedVersion);
+  // license_ver 없는 파일로의 교체 거부
+  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "")));
+  EXPECT_EQ(m->Reload(), Error::InvalidField);
   EXPECT_EQ(m->TotalChannels(), 16);
 
   // 원본 복구 → 오류 해제

@@ -37,7 +37,7 @@ enum class Error {
   ParseError,          // JSON 형식 위반(중복 키, 실수, null, 배열 등 포함)
   BadSignature,        // 서명 누락·형식 오류·불일치
   InvalidField,        // 필수 필드 누락, 값 범위·형식 위반
-  UnsupportedVersion,  // license_ver 미지원, 또는 이전 형식(format_version) 라이선스
+  UnsupportedVersion,  // license_ver 가 이 엔진이 아는 값(1)이 아님
   NotYetValid,         // not_before 이전
   Expired,             // not_after 이후
   ChannelLimit,        // 엔진별 상한 또는 total 상한까지 모두 사용 중 (잠시 후 재시도)
@@ -105,7 +105,7 @@ class VerifiedLicense {
 Error VerifySignature(const std::string& license_text, VerifiedLicense* out, std::string* detail = nullptr);
 
 // 선택 도우미: 표준 형식(license_ver 1) 규칙으로 필드를 해석·검증한다(필수 필드, 범위, license_ver, 시각 형식).
-// 쓸지 말지는 SDK 가 결정한다. 실패 시 InvalidField / UnsupportedVersion(이전 형식 format_version 포함).
+// 쓸지 말지는 SDK 가 결정한다. 실패 시 InvalidField(license_ver 없음 포함) / UnsupportedVersion(license_ver ≠ 1).
 struct LicenseFields {
   int license_ver = 0;
   std::string license_id, project_name, license_type, solution, site_id, warning_notice;

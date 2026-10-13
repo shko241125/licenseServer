@@ -214,18 +214,19 @@ TEST(License, SchemaValidationAfterSignature) {
     return SignRaw(Replace(c.Json(), from, to));
   };
   const std::string ver = "\"license_ver\":1,";
-  // 형식 버전: 다른 값·없음·타입 오류·이전 형식
+  // 형식 버전: 다른 값 → UnsupportedVersion, 없음·타입 오류 → InvalidField
   EXPECT_EQ(Verify(signed_json("\"license_ver\":1", "\"license_ver\":2")), Error::UnsupportedVersion);
   EXPECT_EQ(Verify(signed_json(ver, "")), Error::InvalidField);
   EXPECT_EQ(Verify(signed_json("\"license_ver\":1", "\"license_ver\":\"1\"")), Error::InvalidField);
-  EXPECT_EQ(Verify(signed_json(ver, "\"format_version\":1,")), Error::UnsupportedVersion);  // 이전 형식
   {
     std::string detail;
     lic::LicenseData d;
     auto pub = PublicOf(TestSeed());
-    ASSERT_EQ(lic::ParseAndVerify(signed_json(ver, "\"format_version\":1,"), pub.data(), &d, &detail),
+    ASSERT_EQ(lic::ParseAndVerify(signed_json(ver, ""), pub.data(), &d, &detail), Error::InvalidField);
+    EXPECT_EQ(detail, "license_ver: must be an integer");
+    ASSERT_EQ(lic::ParseAndVerify(signed_json("\"license_ver\":1", "\"license_ver\":2"), pub.data(), &d, &detail),
               Error::UnsupportedVersion);
-    EXPECT_NE(detail.find("legacy"), std::string::npos) << detail;
+    EXPECT_EQ(detail, "license_ver 2 is not supported");
   }
   // 문자열 필드
   EXPECT_EQ(Verify(signed_json("\"site_id\":\"SEOUL-MAIN-DC\",", "")), Error::InvalidField);
@@ -382,10 +383,15 @@ TEST(License, SignContractDefaultsAndChecks) {
     EXPECT_EQ(verified.license_type, t);
   }
 
-  // 이전 형식 키가 섞인 계약은 거부 (검증기는 무시하므로 서명하면 오해를 부른다)
-  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"format_version\":1,")), Error::InvalidField);
-  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"license_ver\":1,\"format_version\":1,")),
+  // 엄격 발급: 규격에 없는 키가 있는 계약은 거부 (검증기는 무시하므로 서명하면 오해를 부른다)
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "")), Error::Ok) << detail;   // license_ver 는 생략 가능(→ 1)
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"version\":1,")), Error::InvalidField);
+  EXPECT_EQ(detail, "version: unknown key (not in license_ver 1)");
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"license_ver\":1,\"customer_memo\":\"x\",")),
             Error::InvalidField);
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"not_after\":", "\"renew_after\":\"x\",\"not_after\":")),
+            Error::InvalidField);
+  EXPECT_EQ(detail, "validity.renew_after: unknown key (not in license_ver 1)");
   EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"not_after\":", "\"grace_period_days\":14,\"not_after\":")),
             Error::InvalidField);
   EXPECT_NE(detail.find("grace_period_days"), std::string::npos) << detail;

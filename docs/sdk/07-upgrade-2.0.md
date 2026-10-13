@@ -12,7 +12,7 @@
 | 새 필드 | — | `solution` |
 | 상태 | `NotYetValid`, `Valid`, `Grace`, `Expired` | `NotYetValid`, `Valid`, `Expired` |
 | 새 오류 | — | `1011 LICENSE_ENGINE_NOT_LICENSED` |
-| 서로 다른 버전 사이 | — | 1.x 파일 → 2.0.0: `1006`. 2.0.0 파일 → 1.x: 아래 §5 |
+| 서로 다른 버전 사이 | — | 1.x 파일 → 2.0.x: `1005`(2.0.0~2.0.1은 `1006`). 2.0.x 파일 → 1.x: 아래 §5 |
 
 규격 전체: [04-license-format.md](04-license-format.md).
 
@@ -75,7 +75,7 @@ const int pool = std::min<int>(configured, mgr->MaxChannels("offline", engine));
 ## 3. STT 서버(Java)
 
 - 반환 코드 표에 `1011`을 추가합니다(03-stt-server.md §2). `SonaSttErrorCode`에 `LICENSE_ENGINE_NOT_LICENSED`를 추가합니다.
-- `1006`의 문구에 "이전 형식(format_version) 라이선스는 재발급"을 포함합니다.
+- `1005`의 안내에 "`license_ver`가 없으면 이전 형식(`format_version`) 라이선스이므로 재발급"을 포함합니다.
 - 읽기·전달 방식(`readAllBytes` + UTF-8)과 Docker 설정은 바뀌지 않습니다.
 
 ## 4. 빌드
@@ -87,7 +87,7 @@ const int pool = std::min<int>(configured, mgr->MaxChannels("offline", engine));
 
 1. **SDK를 2.0.0으로 바꾸고 배포합니다.**
 2. 그 뒤에 새 형식(`license_ver` 1) 라이선스를 발급·반입합니다.
-3. 현장의 이전 형식 라이선스는 갱신 발급(발급 담당)으로 새 형식으로 바꿉니다. 2.0.0 SDK는 이전 형식을 `full`·Manager에서 `1006`으로 거부합니다.
+3. 현장의 이전 형식 라이선스는 갱신 발급(발급 담당)으로 새 형식으로 바꿉니다. 2.0.2 SDK는 이전 형식을 `full`·Manager에서 `1005`로 거부합니다.
 
 순서를 바꾸면(새 라이선스를 1.x SDK에 넣으면, 실측):
 - `full`·Manager: `1005`(`format_version` 없음)로 거부
@@ -99,5 +99,5 @@ const int pool = std::min<int>(configured, mgr->MaxChannels("offline", engine));
 - [ ] 값 경로를 `allowed_channels.total`, `allowed_channels.<항목>.<세부 항목>`으로 바꿨다
 - [ ] `1011` 처리와 로그 이름을 추가했다
 - [ ] 영구 라이선스(9999-12-31)로 기동해 만료로 오판하지 않는다
-- [ ] 이전 형식 라이선스로 기동하면 `full`에서 `1006`이다
+- [ ] 이전 형식 라이선스로 기동하면 `full`에서 `1005`다
 - [ ] 05-testing.md §3 수용 기준을 2.0.0 기준으로 다시 통과했다

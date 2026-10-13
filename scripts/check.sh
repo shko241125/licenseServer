@@ -76,18 +76,18 @@ printf -- '--license-verify-mode=FULL\n' > "$W/bad.cfg"
 if "$L" verify -pub "$W/keys/public.key" "$W/tampered.lic" >/dev/null; then echo "tampered verified"; exit 1; fi
 if "$L" verify -pub "$W/keys/public.key" "$W/expired.lic" >/dev/null; then echo "expired verified"; exit 1; fi
 [ "$(wc -l < "$W/ledger/ledger.jsonl")" = 4 ] || { echo "ledger rows"; exit 1; }
-# 이전 형식(format_version) 계약은 발급 거부, 운영 라이선스에 종료일을 주면 발급 거부(발급 정책)
-python3 - "$W/valid.json" > "$W/legacy.json" <<'PY'
+# 규격에 없는 키가 있는 계약은 발급 거부(엄격 발급), 운영 라이선스에 종료일을 주면 발급 거부(발급 정책)
+python3 - "$W/valid.json" > "$W/unknown-key.json" <<'PY'
 import json, sys
-c = json.load(open(sys.argv[1])); c["format_version"] = 1
+c = json.load(open(sys.argv[1])); c["validity"]["extra_days"] = 14
 print(json.dumps(c, ensure_ascii=False))
 PY
-out=$("$L" issue -key "$W/keys/private.key" -in "$W/legacy.json" -out "$W/legacy.lic" 2>&1 || true)
-grep -q "legacy format key" <<<"$out" || { echo "legacy contract accepted: $out"; exit 1; }
+out=$("$L" issue -key "$W/keys/private.key" -in "$W/unknown-key.json" -out "$W/unknown-key.lic" 2>&1 || true)
+grep -q "validity.extra_days: unknown key" <<<"$out" || { echo "unknown-key contract accepted: $out"; exit 1; }
 sed 's/9999-12-31T23:59:59Z/2030-01-01T00:00:00Z/' "$W/valid.json" > "$W/prod-dated.json"
 out=$("$L" issue -key "$W/keys/private.key" -in "$W/prod-dated.json" -out "$W/prod-dated.lic" 2>&1 || true)
 grep -q "production licenses must be permanent" <<<"$out" || { echo "dated production accepted: $out"; exit 1; }
-[ ! -e "$W/legacy.lic" ] && [ ! -e "$W/prod-dated.lic" ] || { echo "rejected contract wrote a license"; exit 1; }
+[ ! -e "$W/unknown-key.lic" ] && [ ! -e "$W/prod-dated.lic" ] || { echo "rejected contract wrote a license"; exit 1; }
 # 키 혼동 방지: 비밀키를 공개키 자리에, 공개키를 발급 키 자리에 쓰면 거부
 # (pipefail 이므로 기대된 실패 코드를 파이프에 넣지 않고 출력을 먼저 받는다)
 out=$("$L" verify -pub "$W/keys/private.key" "$W/valid.lic" 2>&1 || true)

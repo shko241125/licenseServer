@@ -50,7 +50,7 @@
 
 | 경로 | 타입 | 규칙 |
 |---|---|---|
-| `license_ver` | 정수 | `1`. 가장 먼저 판정합니다. 다른 값이면 `1006`. 없으면 `1005`, 단 `format_version`이 있으면(이전 형식) `1006` |
+| `license_ver` | 정수 | `1`. 가장 먼저 판정합니다. 다른 값이면 `1006`, 없거나 정수가 아니면 `1005`(이전 형식 `format_version` 파일 포함) |
 | `license_id` | 문자열 | 1~128바이트. 판정에 쓰지 않음. **발급 건의 유일한 식별자**(장부 조회, 무효 처리 여부 확인, 같은 조건 재발급본 구분). 발급 도구가 32자리 16진수로 생성 |
 | `project_name` | 문자열 | 1~256바이트. 표시·식별용(형식만 검사, 값 비교·집행 없음). 고객이 읽는 평문이므로 내부 코드명은 넣지 않음 |
 | `license_type` | 문자열 | 1~64바이트. 발급 도구는 `production`(운영)·`trial`(시험·데모)·`dev`(개발)만 발급. 검증기는 값을 제한하지 않음(표시용) |
@@ -85,7 +85,7 @@
 | `trial`(시험·데모), `dev`(개발) | 실제 종료일. 기간 길이 제한 없음(다년 과제 가능). 영구 값은 거부(발급 서버는 9999년 이후 종료도 거부) |
 | 그 밖의 값 | 발급 거부 |
 
-- 이전 형식 키(`format_version`, `allowed_channels.online_stt`/`offline_stt`, `validity.grace_period_days`)가 섞인 계약은 거부합니다.
+- **엄격 발급:** 위 표(§2)에 없는 키가 있는 계약은 거부합니다(`<키>: unknown key`). 최상위는 `license_ver`·`license_id`·`project_name`·`license_type`·`solution`·`site_id`·`allowed_channels`·`validity`·`warning_notice`, `validity`는 `issued_at`·`not_before`·`not_after`만 받습니다. `allowed_channels`의 항목 이름은 자유입니다. 검증기는 모르는 키를 허용하므로(§5), 규격 밖 키(오타, 이전 형식의 `format_version`·`grace_period_days` 등)를 그대로 서명하면 그 값이 적용되는 것처럼 보이는 라이선스가 나가기 때문입니다.
 - `license_ver`, `license_id`, `validity.issued_at`은 생략하면 자동으로 채웁니다.
 
 ## 3. JSON 문법 (모든 모드 공통 — 위반 시 `1003`)
@@ -133,9 +133,10 @@ RFC 8259의 **엄격한 부분집합**만 받습니다.
 - **필드 추가**(선택 필드):
   - `license_ver`를 올리지 않고 추가할 수 있습니다. 기존 SDK는 표준 규칙에서 이 필드를 무시합니다.
   - 새 SDK는 `Has`/`Get*`로 읽되, **값이 없을 때의 기본 동작**을 반드시 정해 둡니다.
+  - 발급 도구는 엄격 발급이므로, 새 필드를 넣으려면 발급 도구(`SignContract`)의 허용 키 목록도 함께 고칩니다.
 - **`license_ver` 올림**: 기존 필드의 의미·타입·필수 여부가 바뀔 때만 올립니다. 기존 SDK는 `full` 모드에서 `1006`으로 거부합니다.
   - 단, `signature` 모드는 버전을 보지 않습니다. 버전별 분기가 필요하면 SDK가 `GetInt("license_ver")`로 확인합니다.
-- **이전 형식(`format_version` 1, 코어 1.x)**: 코어 2.0.0부터 `full`·`Manager`에서 `1006`으로 거부합니다. `license_ver` 1로 재발급합니다. 서명 자체는 유효하므로 `signature` 모드에서는 통과합니다.
+- **이전 형식(`format_version` 1, 코어 1.x)**: `license_ver`가 없으므로 `full`·`Manager`에서 `1005`(`license_ver: must be an integer`)로 거부합니다(코어 2.0.0~2.0.1은 `1006`, 2.0.2부터 `1005`). `license_ver` 1로 재발급합니다. 서명 자체는 유효하므로 `signature` 모드에서는 통과합니다.
 - **정규화 규칙과 골든 파일**(`core/testdata/golden_*`)은 바꾸지 않습니다. 바꾸면 이미 배포된 라이선스가 모두 깨집니다.
 - **새 형식 라이선스를 이전 SDK(코어 1.x)에 넣으면**(실측): `full`·Manager는 `1005`(`format_version` 없음)로 거부합니다. 그런데 **기본 `signature` 모드는 통과**하고, 이전 값 경로 `allowed_channels.offline_stt`는 없습니다(`GetInt` = false). 이때 채널 한도는 그 SDK가 "값이 없을 때" 어떻게 하는지에 달려 있습니다. 따라서 **SDK를 2.0.0 기준으로 먼저 배포한 뒤** 새 형식 라이선스를 내보냅니다.
 - 기존 `sonaLicense.*.key`는 이 규격이 아닙니다(항상 `1003`).

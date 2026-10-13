@@ -286,8 +286,8 @@ const char* ErrorMessage(Error e) {
     case Error::InvalidField:
       return "License contents are invalid. Contact the vendor for a reissued license.";
     case Error::UnsupportedVersion:
-      return "License format is not supported by this engine (legacy format_version license, or a "
-             "newer license_ver). Request a license in the supported format.";
+      return "License version (license_ver) is not supported by this engine. "
+             "Request a license in the supported format.";
     case Error::NotYetValid:
       return "License is not valid yet (before not_before). Check the host clock.";
     case Error::Expired:

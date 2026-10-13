@@ -202,15 +202,11 @@ TEST(VerifyMode, SingleEntryMatchesSeparateFunctions) {
   old.not_before = "2020-01-01T00:00:00Z";
   const std::string expired = Issue(old);
   const std::string nonstandard = SignRaw("{\"license_ver\":7,\"allowed_channels\":{\"total\":999999}}");
-  // 이전 형식(format_version 1) 라이선스: 서명만 모드는 통과, 전체 모드는 UnsupportedVersion
-  const std::string legacy = SignRaw(
-      "{\"format_version\":1,\"license_id\":\"0123456789abcdef0123456789abcdef\",\"project_name\":\"p\","
-      "\"license_type\":\"production\",\"site_id\":\"s\",\"allowed_channels\":{\"online_stt\":1,\"offline_stt\":1},"
-      "\"validity\":{\"issued_at\":\"2026-09-21T00:00:00Z\",\"not_before\":\"2026-09-21T00:00:00Z\","
-      "\"not_after\":\"2027-09-20T23:59:59Z\",\"grace_period_days\":14},\"warning_notice\":\"n\"}");
+  // license_ver 가 없는 라이선스: 서명만 모드는 통과, 전체 모드는 InvalidField
+  const std::string no_ver = SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", ""));
   const std::string valid = Issue(Contract{});
   const int64_t now = T("2027-01-01T00:00:00Z");
-  for (const std::string* text : {&valid, &expired, &nonstandard, &legacy}) {
+  for (const std::string* text : {&valid, &expired, &nonstandard, &no_ver}) {
     for (lic::VerifyMode mode : {lic::VerifyMode::SignatureOnly, lic::VerifyMode::Full}) {
       lic::VerifiedLicense a, b;
       Error ea = lic::VerifyWith(*text, mode, pub.data(), now, &a, nullptr, nullptr);
@@ -228,9 +224,9 @@ TEST(VerifyMode, SingleEntryMatchesSeparateFunctions) {
   EXPECT_EQ(lic::VerifyWith(nonstandard, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
   EXPECT_EQ(lic::VerifyWith(nonstandard, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
             Error::UnsupportedVersion);
-  EXPECT_EQ(lic::VerifyWith(legacy, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
-  EXPECT_EQ(lic::VerifyWith(legacy, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
-            Error::UnsupportedVersion);
+  EXPECT_EQ(lic::VerifyWith(no_ver, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
+  EXPECT_EQ(lic::VerifyWith(no_ver, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
+            Error::InvalidField);
   // SignatureOnly 는 fields 를 건드리지 않는다
   lic::LicenseFields f;
   f.site_id = "untouched";

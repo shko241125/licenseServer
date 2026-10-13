@@ -132,15 +132,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
   LicenseData d;
   // license_ver 를 먼저 본다: 다른 형식이면 다른 필드 오류보다 "미지원 버전"이 정확한 사유다.
   const Value* lv = root.Find("license_ver");
-  if (!lv) {
-    if (root.Find("format_version")) {  // 이전 형식(2026-10-06 이전 발급분)
-      if (detail) *detail = "legacy license format (format_version) is not supported; reissue with license_ver 1";
-      return Error::UnsupportedVersion;
-    }
-    x.Fail("license_ver", "must be an integer");
-    return Error::InvalidField;
-  }
-  if (lv->type != Value::Type::Int) {
+  if (!lv || lv->type != Value::Type::Int) {
     x.Fail("license_ver", "must be an integer");
     return Error::InvalidField;
   }
@@ -450,18 +442,31 @@ Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kS
     if (detail) *detail = "contract must not contain \"signature\"";
     return Error::InvalidField;
   }
-  // 이전 형식의 키가 섞인 계약은 거부한다. 검증기는 모르는 키를 무시하므로, 그대로 서명하면
-  // 유예 기간 등이 적용되는 것처럼 보이는 라이선스가 나간다.
+  // 엄격 발급: 규격(license_ver 1)에 있는 키만 서명한다. 검증기는 모르는 키를 허용·무시하므로,
+  // 오타나 규격에 없는 키(예: 유예 일수)가 섞인 계약을 그대로 서명하면 그 값이 적용되는 것처럼 보이는
+  // 라이선스가 나간다. allowed_channels 의 항목 이름은 자유이며 값 규칙은 ExtractFields 가 본다.
   {
-    const Value* ch = root.Find("allowed_channels");
+    static const char* const kTopKeys[] = {"license_ver", "license_id", "project_name", "license_type", "solution",
+                                           "site_id", "allowed_channels", "validity", "warning_notice"};
+    static const char* const kValidityKeys[] = {"issued_at", "not_before", "not_after"};
+    auto known = [](const std::string& k, const auto& keys) {
+      for (const char* x : keys) if (k == x) return true;
+      return false;
+    };
+    for (const auto& [k, v] : root.members) {
+      if (!known(k, kTopKeys)) {
+        if (detail) *detail = k + ": unknown key (not in license_ver 1)";
+        return Error::InvalidField;
+      }
+    }
     const Value* va = root.Find("validity");
-    const char* legacy = root.Find("format_version") ? "format_version"
-        : (ch && ch->Find("online_stt")) ? "allowed_channels.online_stt"
-        : (ch && ch->Find("offline_stt")) ? "allowed_channels.offline_stt"
-        : (va && va->Find("grace_period_days")) ? "validity.grace_period_days" : nullptr;
-    if (legacy) {
-      if (detail) *detail = std::string(legacy) + ": legacy format key is not allowed in license_ver 1 contracts";
-      return Error::InvalidField;
+    if (va && va->type == Value::Type::Object) {
+      for (const auto& [k, v] : va->members) {
+        if (!known(k, kValidityKeys)) {
+          if (detail) *detail = "validity." + k + ": unknown key (not in license_ver 1)";
+          return Error::InvalidField;
+        }
+      }
     }
   }
   if (!root.Find("license_ver")) root.Set("license_ver", json::MakeInt(kLicenseVer));
