@@ -16,7 +16,7 @@
   <div class="alert alert-warn" role="alert" th:if="${keyState.name() != 'UNSEALED'}">
     <div>서명 키가 <span th:replace="~{fragments/layout :: badge(${keyState})}"></span> 상태입니다. 입력·미리보기는 가능하지만 발급하려면 관리자가 키를 해제해야 합니다.</div></div>
   <div class="alert" th:if="${!#strings.isEmpty(form.renewedFrom)}">
-    <div>원본 라이선스 <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a>를 기준으로 채웠습니다. 시작일은 시험·PoC 면 원본 종료 다음 날(종료는 그로부터 1년), 영구(운영) 원본이면 오늘입니다.</div></div>
+    <div>원본 라이선스 <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a>를 기준으로 채웠습니다. 시작일은 시험·개발이면 원본 종료 다음 날(종료는 기본 1년, 바꿀 수 있음), 영구(운영) 원본이면 오늘입니다.</div></div>
 
   <form th:action="@{/licenses/preview}" th:object="${form}" method="post" class="card">
     <input type="hidden" th:field="*{submissionToken}">
@@ -35,7 +35,7 @@
         <div class="field"><label for="licenseType" class="req">유형</label>
           <select th:field="*{licenseType}" th:aria-invalid="${errors['licenseType'] != null} ? 'true' : null">
             <option th:each="t : ${types}" th:value="${t}" th:text="${t}"></option></select>
-          <span class="hint">production 운영(영구) · trial 시험 · poc 개념 검증</span>
+          <span class="hint">production 운영(영구) · trial 시험(데모) · dev 개발</span>
           <span class="field-error" th:text="${errors['licenseType']}"></span></div>
         <div class="field"><label for="solution" class="req">솔루션</label>
           <input th:field="*{solution}" list="solutions" maxlength="128" required class="mono" th:aria-invalid="${errors['solution'] != null} ? 'true' : null">
@@ -67,14 +67,14 @@
 
     <section class="form-section">
       <div class="section-head"><h2>유효 기간 (KST)</h2>
-        <p>운영(production)은 <b>영구</b>(9999-12-31T23:59:59Z)로 발급되어 종료 입력을 쓰지 않습니다. 시험·PoC 는 종료일이 필요합니다. 유예 기간은 없습니다.</p></div>
+        <p>운영(production)은 <b>영구</b>(9999-12-31T23:59:59Z)로 발급되어 종료 입력을 쓰지 않습니다. 시험·개발은 종료일이 필요합니다. 유예 기간은 없습니다.</p></div>
       <div class="form-grid">
         <div class="field span-2"><span class="label req">시작</span>
           <div class="inline-fields">
             <input type="date" th:field="*{notBeforeDate}" required aria-label="시작 날짜" th:aria-invalid="${errors['notBefore'] != null} ? 'true' : null">
             <input type="time" step="1" th:field="*{notBeforeTime}" aria-label="시작 시각" th:aria-invalid="${errors['notBefore'] != null} ? 'true' : null"></div>
           <span class="field-error" th:text="${errors['notBefore']}"></span></div>
-        <div class="field span-2"><span class="label">종료 (시험·PoC)</span>
+        <div class="field span-2"><span class="label">종료 (시험·개발)</span>
           <div class="inline-fields">
             <input type="date" th:field="*{notAfterDate}" aria-label="종료 날짜" th:aria-invalid="${errors['notAfter'] != null} ? 'true' : null">
             <input type="time" step="1" th:field="*{notAfterTime}" aria-label="종료 시각" th:aria-invalid="${errors['notAfter'] != null} ? 'true' : null"></div>

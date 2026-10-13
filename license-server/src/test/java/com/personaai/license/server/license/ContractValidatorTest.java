@@ -64,6 +64,48 @@ class ContractValidatorTest {
     }
 
     @Test
+    void licenseTypesAreProductionTrialDev() {
+        assertThat(ContractValidator.TYPES).containsExactly("production", "trial", "dev");   // 화면 순서
+        IssueForm f = trial();
+        f.setLicenseType("dev");
+        var r = ContractValidator.validate(f, KST, NOW);
+        assertThat(r.errors()).isEmpty();
+        assertThat(r.contract().permanent()).isFalse();
+        f.setNotAfterDate("9999-12-31");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("notAfter");     // 개발도 영구 불가
+        for (String t : new String[] {"enterprise", "demo", "development", "Production", "", null}) {
+            f = valid();
+            f.setLicenseType(t);
+            assertThat(ContractValidator.validate(f, KST, NOW).errors()).as(String.valueOf(t)).containsKey("licenseType");
+        }
+    }
+
+    @Test
+    void longTrialAndDevPeriodsAreNormal() {
+        // 정부과제 등 2~5년 단위 시험·개발 라이선스: 오류도, 기간 경고도 없다(상한은 9999년 이후 종료 거부뿐)
+        for (String type : new String[] {"trial", "dev"}) {
+            IssueForm f = trial();
+            f.setLicenseType(type);
+            f.setNotBeforeDate("2026-10-01");
+            f.setNotAfterDate("2031-09-30");      // 5년
+            var r = ContractValidator.validate(f, KST, NOW);
+            assertThat(r.errors()).as(type).isEmpty();
+            assertThat(r.warnings()).as(type).isEmpty();
+        }
+    }
+
+    @Test
+    void renewalKeepsLicenseType() {
+        Contract c = ContractValidator.validate(trial(), KST, NOW).contract();
+        for (String type : ContractValidator.TYPES) {
+            LicenseRecord rec = new LicenseRecord(1, "0".repeat(32), null, LicenseRecord.Status.ISSUED, c.projectName(),
+                    type, c.siteId(), c.issuedAt(), c.notBefore(), c.notAfter(), c.warningNotice(), 1, c.solution(),
+                    c.total(), c.channels(), null, null, null, "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
+            assertThat(IssueForm.copyOf(rec, KST, java.time.LocalDate.of(2026, 10, 13)).getLicenseType()).isEqualTo(type);
+        }
+    }
+
+    @Test
     void acceptsMinutePrecisionTime() {
         IssueForm f = valid();
         f.setNotBeforeTime("09:30");

@@ -91,7 +91,7 @@ public class LicenseController {
         model.addAttribute("form", f.padChannels());
         model.addAttribute("errors", errors);
         model.addAttribute("message", message);
-        model.addAttribute("types", ContractValidator.TYPES.stream().sorted().toList());
+        model.addAttribute("types", ContractValidator.TYPES);
         model.addAttribute("projects", licenses.distinctValues("project_name"));
         model.addAttribute("sites", licenses.distinctValues("site_id"));
         model.addAttribute("solutions", licenses.distinctValues("solution"));

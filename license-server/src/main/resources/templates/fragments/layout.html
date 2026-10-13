@@ -62,7 +62,7 @@
                      'UNSEALED':'해제됨','SEALED':'봉인됨','MISSING':'키 없음',
                      'VALID':'유효','GRACE':'유예 기간','NOT_YET_VALID':'시작 전','EXPIRED':'만료',
                      'ADMIN':'관리자','ISSUER':'발급자','VIEWER':'조회자',
-                     'production':'운영','trial':'시험','poc':'PoC'} }"
+                     'production':'운영','trial':'시험(데모)','dev':'개발'} }"
       th:classappend="${k.get(c) != null and k.get(c) != ''} ? 'badge-' + ${k.get(c)}"
       th:title="${c}" th:text="${l.get(c)} ?: ${c}">상태</span>
 

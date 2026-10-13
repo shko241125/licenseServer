@@ -18,7 +18,7 @@ licensectl keygen -out /secure/stt-license-keys
 ## 2. 발급
 
 계약 정보를 JSON으로 작성한다(예: `core/testdata/contract.example.json`). 다음 필드는 생략하면 자동으로 채워진다.
-- `format_version`: 1
+- `license_ver`: 1
 - `license_id`: 32자리 난수
 - `validity.issued_at`: 발급 시각
 
@@ -28,8 +28,10 @@ licensectl issue -key /secure/stt-license-keys/private.key \
 ```
 - 발급 직후 검증기 경로로 자기검증을 한다.
 - 발급 이력은 `ledger/ledger.jsonl`에 한 줄씩 쌓이고, 사본이 `ledger/<날짜>_<site>_<license_id>.lic`로 저장된다.
-- `license_type`은 `production`, `trial`, `poc` 중 하나만 쓸 수 있다.
-- `grace_period_days`는 0~90, 채널 수는 0~100000이며, 둘 중 한 종류는 1 이상이어야 한다.
+- `license_type`은 `production`(운영), `trial`(시험·데모), `dev`(개발) 중 하나만 쓸 수 있다.
+  - `production`은 `validity.not_after`가 반드시 `9999-12-31T23:59:59Z`(영구), `trial`·`dev`는 실제 종료일이어야 한다.
+- 채널은 `allowed_channels.total`(1~100000) + 이름 자유 항목 `{"세부 항목": 상한}`이다. 각 상한은 0~100000이고 `total` 이하, 하나 이상은 1 이상이어야 한다. 유예 기간은 없다.
+- 이전 형식 키(`format_version`, `online_stt`, `offline_stt`, `grace_period_days`)가 있으면 거부한다. 규격: [04-license-format.md](../../docs/sdk/04-license-format.md)
 - 시각은 `YYYY-MM-DDTHH:MM:SSZ`(UTC) 형식만 받는다. KST 자정은 전날 `15:00:00Z`다.
 
 ## 3. 반입 전 확인 (필수)
@@ -38,7 +40,7 @@ licensectl issue -key /secure/stt-license-keys/private.key \
 licensectl verify -pub public.key license.lic                             # 지금 시각 기준
 licensectl verify -pub public.key -at 2027-09-25T00:00:00Z license.lic    # 특정 시각 기준
 ```
-종료 코드는 서명이 맞고 상태가 VALID 또는 GRACE이면 0, 그 밖에는 1이다.
+종료 코드는 서명이 맞고 상태가 VALID이면 0, 그 밖에는 1이다.
 
 ## 4. 설치·갱신·오류 조치
 

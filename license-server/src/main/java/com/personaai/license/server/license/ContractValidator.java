@@ -18,11 +18,12 @@ import java.util.regex.Pattern;
 /**
  * 입력 편의용 검증(즉시 피드백). 최종 판정은 licensectl(SignContract) 이 한다.
  * 규칙은 core/src/license.cpp ExtractFields·SignContract(license_ver 1)와 같게 유지하며, 경계값 테스트
- * (ValidationParityTest)로 일치를 확인한다. 서버가 더 엄격한 곳: 시험·PoC 의 9999년 종료일 거부,
+ * (ValidationParityTest)로 일치를 확인한다. 서버가 더 엄격한 곳: 시험·개발의 9999년 종료일 거부,
  * (항목, 세부 항목) 중복 행, 이름 없이 상한만 있는 행.
  */
 public final class ContractValidator {
-    public static final Set<String> TYPES = Set.of("production", "trial", "poc");
+    /** 발급 유형(순서 = 화면 선택 순서): 운영(영구) · 시험/데모 · 개발. */
+    public static final List<String> TYPES = List.of("production", "trial", "dev");
     public static final int MAX_CHANNELS = 100_000;
     public static final int MAX_GROUPS = 64;   // allowed_channels 항목 수(total 제외)
     public static final int MAX_ENGINES = 64;  // 항목당 세부 항목 수
@@ -44,7 +45,7 @@ public final class ContractValidator {
         text(e, "siteId", f.getSiteId(), 256);
         text(e, "warningNotice", f.getWarningNotice(), 4096);
         String type = f.getLicenseType();
-        if (type == null || !TYPES.contains(type)) e.put("licenseType", "production, trial, poc 중 하나를 고르세요.");
+        if (type == null || !TYPES.contains(type)) e.put("licenseType", "production, trial, dev 중 하나를 고르세요.");
 
         Integer total = f.getTotal();
         if (total == null || total < 1 || total > MAX_CHANNELS) e.put("total", "1~" + MAX_CHANNELS + " 사이의 정수를 입력하세요.");
@@ -58,7 +59,7 @@ public final class ContractValidator {
         } else {
             na = instant(e, "notAfter", f.getNotAfterDate(), f.getNotAfterTime(), zone);
             if (na != null && !na.isBefore(Instant.parse("9999-01-01T00:00:00Z"))) {
-                e.put("notAfter", "시험·PoC 는 실제 종료일을 입력하세요(영구 발급은 운영만).");
+                e.put("notAfter", "시험·개발은 실제 종료일을 입력하세요(영구 발급은 운영만).");
             }
         }
         if (nb != null && na != null && !e.containsKey("notAfter") && !nb.isBefore(na)) e.put("notAfter", "종료는 시작보다 뒤여야 합니다.");
@@ -69,7 +70,6 @@ public final class ContractValidator {
 
         if (nb.isBefore(now.minusSeconds(86_400))) w.add("시작 시각이 하루 이상 과거입니다.");
         if (!"production".equals(type)) {
-            if (na.isAfter(nb.plusSeconds(400L * 86_400))) w.add("시험·PoC 유효 기간이 1년을 넘습니다.");
             if (na.isBefore(now)) w.add("종료 시각이 이미 지났습니다. 발급해도 즉시 만료 상태입니다.");
         }
         int sum = channels.values().stream().flatMap(m -> m.values().stream()).mapToInt(Integer::intValue).sum();

@@ -27,7 +27,7 @@ class DatabaseGuardIT extends IntegrationTestBase {
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   online_stt, offline_stt, issued_at, not_before, not_after, grace_period_days, warning_notice,
                   public_key_fp, issued_by)
-                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 0, 1, now(), now(), now() + interval '1 day', 14, 'w', ?, ?)""")
+                VALUES (?, ?, 'PENDING', 'p', 'trial', 's', 0, 1, now(), now(), now() + interval '1 day', 14, 'w', ?, ?)""")
                 .params(legacy, UUID.randomUUID(), "0".repeat(64), adminId()).update();
         var r = licenses.findByLicenseId(legacy).orElseThrow();
         assertThat(r.legacy()).isTrue();
@@ -39,21 +39,41 @@ class DatabaseGuardIT extends IntegrationTestBase {
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   online_stt, offline_stt, grace_period_days, license_ver, solution, channels_total, channels_json,
                   issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
-                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 0, 1, 0, 1, 'x', 3, '{}', now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+                VALUES (?, ?, 'PENDING', 'p', 'trial', 's', 0, 1, 0, 1, 'x', 3, '{}', now(), now(), now() + interval '1 day', 'w', ?, ?)""";
         assertThatThrownBy(() -> jdbc.sql(mixed).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
                 "0".repeat(64), adminId()).update()).hasMessageContaining("license_format_shape");
         String incomplete = """
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   license_ver, solution, channels_total, issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
-                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 1, 'x', 3, now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+                VALUES (?, ?, 'PENDING', 'p', 'trial', 's', 1, 'x', 3, now(), now(), now() + interval '1 day', 'w', ?, ?)""";
         assertThatThrownBy(() -> jdbc.sql(incomplete).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
                 "0".repeat(64), adminId()).update()).hasMessageContaining("license_format_shape");
         String badVer = """
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   license_ver, solution, channels_total, channels_json, issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
-                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 2, 'x', 3, '{}', now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+                VALUES (?, ?, 'PENDING', 'p', 'trial', 's', 2, 'x', 3, '{}', now(), now(), now() + interval '1 day', 'w', ?, ?)""";
         assertThatThrownBy(() -> jdbc.sql(badVer).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
                 "0".repeat(64), adminId()).update()).isInstanceOf(DataAccessException.class);
+    }
+
+    /** license_type 은 production/trial/dev 만(DB CHECK). 앱 검증을 거치지 않은 INSERT 도 막는다. */
+    @Test
+    void licenseTypeRestrictedToProductionTrialDev() {
+        String insert = """
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  license_ver, solution, channels_total, channels_json,
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
+                VALUES (?, ?, 'PENDING', 'p', ?, 's', 1, 'x', 3, '{"offline":{"sonastt":3}}',
+                  now(), now(), now() + interval '1 day', 'w', ?, ?)""";
+        for (String type : new String[] {"production", "trial", "dev"}) {
+            String id = UUID.randomUUID().toString().replace("-", "");
+            jdbc.sql(insert).params(id, UUID.randomUUID(), type, "0".repeat(64), adminId()).update();
+            assertThat(licenses.findByLicenseId(id).orElseThrow().licenseType()).isEqualTo(type);
+        }
+        for (String type : new String[] {"enterprise", "Dev", ""}) {
+            assertThatThrownBy(() -> jdbc.sql(insert).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
+                    type, "0".repeat(64), adminId()).update()).as(type).hasMessageContaining("license_type_check");
+        }
     }
 
     long adminId() {
@@ -66,7 +86,7 @@ class DatabaseGuardIT extends IntegrationTestBase {
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   license_ver, solution, channels_total, channels_json,
                   issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
-                VALUES (?, ?, 'PENDING', 'p', 'poc', 's', 1, 'sonastt-universal', 3, '{"offline":{"sonastt":3},"online":{}}',
+                VALUES (?, ?, 'PENDING', 'p', 'trial', 's', 1, 'sonastt-universal', 3, '{"offline":{"sonastt":3},"online":{}}',
                   now(), now(), now() + interval '1 day', 'w', ?, ?)""")
                 .params(id, UUID.randomUUID(), "0".repeat(64), adminId()).update();
         jdbc.sql("UPDATE license SET status='ISSUED', license_text='x', license_sha256=? WHERE license_id=?")

@@ -66,7 +66,9 @@ class ValidationParityTest {
         return Stream.of(
                 c("baseline production (permanent)", f -> {}),
                 c("baseline trial", f -> f.setLicenseType("trial")),
-                c("type poc", f -> f.setLicenseType("poc")),
+                c("type dev", f -> f.setLicenseType("dev")),
+                c("type demo (alias not accepted)", f -> f.setLicenseType("demo")),
+                c("type Production (case)", f -> f.setLicenseType("Production")),
                 c("type unknown", f -> f.setLicenseType("enterprise")),
                 c("production ignores dated end", f -> { f.setNotAfterDate("2027-01-01"); }),
                 c("total 0", f -> f.setTotal(0)),
@@ -115,6 +117,7 @@ class ValidationParityTest {
                 c("trial one second", f -> { f.setLicenseType("trial"); f.setNotAfterDate(f.getNotBeforeDate()); f.setNotAfterTime("00:00:01"); }),
                 // 서버가 의도적으로 더 엄격한 경우
                 stricter("trial ends in year 9999", f -> { f.setLicenseType("trial"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
+                stricter("dev ends in year 9999", f -> { f.setLicenseType("dev"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
                 stricter("duplicate item row", f -> row(f, 5, "offline", "sonastt", 1)));
     }
 

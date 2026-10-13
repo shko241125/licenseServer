@@ -21,7 +21,7 @@ class LicensectlTest {
     final Licensectl real = new Licensectl(TestFixture.LICENSECTL, Duration.ofSeconds(10));
 
     static final String CONTRACT = """
-            {"license_ver":1,"license_id":"0123456789abcdef0123456789abcdef","project_name":"P","license_type":"poc",
+            {"license_ver":1,"license_id":"0123456789abcdef0123456789abcdef","project_name":"P","license_type":"dev",
              "solution":"sonastt-universal","site_id":"S",
              "allowed_channels":{"total":3,"offline":{"sonastt":3},"online":{}},
              "validity":{"issued_at":"2026-09-29T00:00:00Z","not_before":"2026-09-29T00:00:00Z",
@@ -43,7 +43,7 @@ class LicensectlTest {
 
     @Test
     void signErrorIsParsed() {
-        assertThatThrownBy(() -> real.sign(F.privateKeyLine.getBytes(), CONTRACT.replace("\"poc\"", "\"x\"").getBytes()))
+        assertThatThrownBy(() -> real.sign(F.privateKeyLine.getBytes(), CONTRACT.replace("\"dev\"", "\"x\"").getBytes()))
                 .isInstanceOf(LicensectlException.class)
                 .satisfies(e -> assertThat(((LicensectlException) e).errorName()).isEqualTo("LICENSE_INVALID_FIELD"));
         assertThatThrownBy(() -> real.sign(F.publicKey.getBytes(), CONTRACT.getBytes()))

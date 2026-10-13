@@ -108,7 +108,7 @@ public class IssueForm {
 
     /**
      * 갱신 발급: 원본 계약 내용을 채운다.
-     * 기간 — 시험·PoC 는 원본 종료 다음 날부터 1년, 운영(영구) 원본은 오늘부터.
+     * 기간 — 시험·개발은 원본 종료 다음 날부터 1년, 운영(영구) 원본은 오늘부터.
      * 이전 형식(format_version) 원본은 채널 값을 옮길 수 없어(형식이 다름) 기본 행만 둔다.
      */
     public static IssueForm copyOf(LicenseRecord r, ZoneId zone, LocalDate today) {
