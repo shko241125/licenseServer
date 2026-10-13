@@ -480,12 +480,13 @@ Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kS
 
   LicenseData data;
   if (Error e = ExtractFields(root, &data, detail); e != Error::Ok) return e;
+  // 발급 유형은 운영(production)·시험/데모(trial)·개발(dev) 세 가지. 검증기는 이 값을 제한하지 않는다(표시용, D07).
   if (data.license_type != "production" && data.license_type != "trial" &&
-      data.license_type != "poc") {
-    if (detail) *detail = "license_type: must be one of production, trial, poc";
+      data.license_type != "dev") {
+    if (detail) *detail = "license_type: must be one of production, trial, dev";
     return Error::InvalidField;
   }
-  // 발급 정책: 운영은 영구(사실상 무기한), 시험·PoC 는 실제 종료일.
+  // 발급 정책: 운영은 영구(사실상 무기한), 시험·개발은 실제 종료일.
   int64_t permanent = 0;
   ParseUtcTime(kPermanentNotAfter, &permanent);
   if (data.license_type == "production" && data.not_after != permanent) {
@@ -494,7 +495,7 @@ Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kS
     return Error::InvalidField;
   }
   if (data.license_type != "production" && data.not_after == permanent) {
-    if (detail) *detail = "validity.not_after: trial/poc licenses must have a real end date";
+    if (detail) *detail = "validity.not_after: trial/dev licenses must have a real end date";
     return Error::InvalidField;
   }
 

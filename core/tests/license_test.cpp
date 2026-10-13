@@ -348,7 +348,19 @@ TEST(License, SignContractDefaultsAndChecks) {
   Contract inverted = Contract::Trial("2026-01-01T00:00:00Z");
   EXPECT_EQ(sign(inverted.Json()), Error::InvalidField);
 
-  // 발급 정책: 운영은 영구, 시험·PoC 는 실제 종료일
+  // 발급 유형은 production / trial / dev 만
+  Contract dev = Contract::Trial();
+  dev.license_type = "dev";
+  EXPECT_EQ(sign(dev.Json()), Error::Ok) << detail;
+  EXPECT_EQ(sign(bad_type.Json()), Error::InvalidField);
+  EXPECT_NE(detail.find("production, trial, dev"), std::string::npos) << detail;
+  for (const char* t : {"Production", "demo", "development", "trial "}) {   // 별칭·대소문자·공백은 받지 않음
+    Contract c = Contract::Trial();
+    c.license_type = t;
+    EXPECT_EQ(sign(c.Json()), Error::InvalidField) << t;
+  }
+
+  // 발급 정책: 운영은 영구, 시험·개발은 실제 종료일
   EXPECT_EQ(sign(Contract::Trial().Json()), Error::Ok) << detail;
   Contract prod_dated;
   prod_dated.not_after = "2027-09-20T23:59:59Z";
@@ -356,9 +368,19 @@ TEST(License, SignContractDefaultsAndChecks) {
   EXPECT_NE(detail.find("permanent"), std::string::npos) << detail;
   Contract trial_perm = Contract::Trial("9999-12-31T23:59:59Z");
   EXPECT_EQ(sign(trial_perm.Json()), Error::InvalidField);
-  Contract poc_perm = trial_perm;
-  poc_perm.license_type = "poc";
-  EXPECT_EQ(sign(poc_perm.Json()), Error::InvalidField);
+  Contract dev_perm = trial_perm;
+  dev_perm.license_type = "dev";
+  EXPECT_EQ(sign(dev_perm.Json()), Error::InvalidField);
+  EXPECT_NE(detail.find("trial/dev"), std::string::npos) << detail;
+
+  // 검증기는 유형 값을 제한하지 않는다(표시용): 발급 목록 밖의 값도 서명이 맞으면 통과
+  for (const char* t : {"dev", "enterprise"}) {
+    Contract c = Contract::Trial();
+    c.license_type = t;
+    lic::LicenseData verified;
+    EXPECT_EQ(Verify(SignRaw(c.Json()), &verified), Error::Ok) << t;
+    EXPECT_EQ(verified.license_type, t);
+  }
 
   // 이전 형식 키가 섞인 계약은 거부 (검증기는 무시하므로 서명하면 오해를 부른다)
   EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1,", "\"format_version\":1,")), Error::InvalidField);

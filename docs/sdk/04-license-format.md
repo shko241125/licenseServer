@@ -53,7 +53,7 @@
 | `license_ver` | 정수 | `1`. 가장 먼저 판정합니다. 다른 값이면 `1006`. 없으면 `1005`, 단 `format_version`이 있으면(이전 형식) `1006` |
 | `license_id` | 문자열 | 1~128바이트. 판정에 쓰지 않음. **발급 건의 유일한 식별자**(장부 조회, 무효 처리 여부 확인, 같은 조건 재발급본 구분). 발급 도구가 32자리 16진수로 생성 |
 | `project_name` | 문자열 | 1~256바이트. 표시·식별용(형식만 검사, 값 비교·집행 없음). 고객이 읽는 평문이므로 내부 코드명은 넣지 않음 |
-| `license_type` | 문자열 | 1~64바이트. 발급 도구는 `production`/`trial`/`poc`만 발급(검증기는 값 제한 없음) |
+| `license_type` | 문자열 | 1~64바이트. 발급 도구는 `production`(운영)·`trial`(시험·데모)·`dev`(개발)만 발급. 검증기는 값을 제한하지 않음(표시용) |
 | `solution` | 문자열 | 1~128바이트. 값은 자유(예: `sonastt-universal`) |
 | `site_id` | 문자열 | 1~256바이트 |
 | `warning_notice` | 문자열 | 1~4096바이트 |
@@ -82,7 +82,8 @@
 | 유형 | `not_after` |
 |---|---|
 | `production` | 반드시 `9999-12-31T23:59:59Z`(영구) |
-| `trial`, `poc` | 실제 종료일. 영구 값은 거부(발급 서버는 9999년 이후 종료도 거부) |
+| `trial`(시험·데모), `dev`(개발) | 실제 종료일. 기간 길이 제한 없음(다년 과제 가능). 영구 값은 거부(발급 서버는 9999년 이후 종료도 거부) |
+| 그 밖의 값 | 발급 거부 |
 
 - 이전 형식 키(`format_version`, `allowed_channels.online_stt`/`offline_stt`, `validity.grace_period_days`)가 섞인 계약은 거부합니다.
 - `license_ver`, `license_id`, `validity.issued_at`은 생략하면 자동으로 채웁니다.

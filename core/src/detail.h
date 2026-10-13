@@ -45,8 +45,8 @@ Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKe
 
 // 발급기 전용: 계약 JSON(서명 없음)에 기본값을 채우고 검증·서명한 뒤 사람이 읽는 license.lic 텍스트를 만든다.
 //   license_ver 없음 → 1, license_id 없음 → 난수 32 hex, validity.issued_at 없음 → now
-// 발급 정책: license_type 은 production/trial/poc, production 의 not_after 는 영구 표기(kPermanentNotAfter),
-//            trial/poc 는 영구 표기 금지. 이전 형식 키(format_version, grace_period_days, online_stt, offline_stt)는 거부.
+// 발급 정책: license_type 은 production/trial/dev, production 의 not_after 는 영구 표기(kPermanentNotAfter),
+//            trial/dev 는 영구 표기 금지. 이전 형식 키(format_version, grace_period_days, online_stt, offline_stt)는 거부.
 // 발급 직후 같은 키의 공개키로 ParseAndVerify 자기검증까지 통과해야 성공.
 Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kSeedSize],
                    int64_t now, std::string* license_text, LicenseData* out, std::string* detail);

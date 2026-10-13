@@ -8,7 +8,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 버전 | 2.0.0 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
+| 버전 | 2.0.1 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
 | 대상 | STT SDK(C++/JNI, `libsonastt_jni_v2.so`) 개발자, STT 서버(Java) 개발자, 현장 설치 엔지니어 |
 | 받는 것 | 이 패키지(소스·문서·검증 도구) + 발급 담당이 주는 **공개키 파일 `public.key`**(Base64 44자) |
 | 받지 않는 것 | 비밀키, 발급 서버. 라이선스 발급은 발급 담당(사내 발급 서버)이 합니다 |
@@ -91,7 +91,7 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 | 라이선스 갱신 방식 | **미정(추후 결정)** — 세션·채널 수 반영 등 분석 필요(02-integration.md §8). 현재는 서버 재시작 |
 | 라이선스 형식 | `license_ver` 1(2026-10-06). 이전 형식(`format_version`)은 `full`·Manager에서 `1006` — 재발급 |
 | 채널 의미 | `allowed_channels.total` = 모든 항목·세부 항목의 **동시 세션 합계 상한**. 나머지는 이름 자유 항목 `"항목": {"세부 항목": 상한}`(예: `offline`, `online`) |
-| 기간 | 운영(`production`)은 영구(`9999-12-31T23:59:59Z`), 시험·PoC는 실제 종료일. **유예 기간 없음** |
+| 유형·기간 | `license_type`은 `production`(운영, 영구 `9999-12-31T23:59:59Z`) · `trial`(시험·데모) · `dev`(개발)만 발급, 시험·개발은 실제 종료일. **유예 기간 없음**. 검증기는 유형 값을 제한하지 않음 |
 | 표시용 필드 | `project_name`, `site_id`, `license_type`, `solution`, `license_id`, `issued_at`은 형식만 검사하고 판정에 쓰지 않음 |
 | 배포 순서 | SDK 2.0.0 먼저, 그다음 새 형식 라이선스(07-upgrade-2.0.md §5) |
 | 기존 `.key` | 새 모듈로는 검증되지 않음(1003). 공존하려면 SDK가 기존 경로로 분기(02-integration.md §6) |
@@ -100,6 +100,7 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 
 | 버전 | 내용 |
 |---|---|
+| 2.0.1 | 발급 유형을 `production`(운영)·`trial`(시험·데모)·`dev`(개발)로 한정(`licensectl issue`/`SignContract`). **검증 동작·API 변경 없음** — 2.0.0을 적용한 SDK는 다시 빌드하지 않아도 됨. 문서 갱신 |
 | 2.0.0 | **라이선스 형식 변경(호환 깨짐):** `license_ver` 1, `solution`, `allowed_channels.total` + 이름 자유 항목별 세부 항목 상한(항목·항목당 세부 항목 각 64개 이하), 유예 기간 삭제(`State::Grace` 제거). `Kind` 삭제, `LicenseFields::channels`·`Info`·`Manager::Acquire(group, engine, …)`/`MaxChannels(group, engine)`/`TotalChannels()` API 변경, 오류 `1011 LICENSE_ENGINE_NOT_LICENSED` 추가. 이전 형식은 `1006`. 발급 정책(운영 영구) 강제. 골든 파일 재생성(공개키 동일). 다른 언어·도구로 서명할 때의 규칙(04 §4), 업그레이드 안내(07) |
 | 1.1.2 | **1.1.1 회귀 수정:** `-D`의 상대 경로가 절대 경로로 바뀌지 않아 라이브러리 디렉터리 기준으로 읽혔고, 그 자리의 다른 키가 내장될 수 있었음. 부모 일반 변수가 `-D`보다 우선하도록 보장, 일반 변수 상대 경로 거부, 키 경로 회귀 시험 3종, 내장 키 확인 절차(01-build.md §6.5) |
 | 1.1.1 | 부모가 `STT_LICENSE_PUBLIC_KEY_FILE`·`STT_LICENSE_CRYPTO_TARGET`을 **일반 변수**로 지정하면 서브프로젝트에서 지워지던 문제 수정(CMP0126). 공개키 주입 방법론 문서화(01-build.md §6), 헤드리스 JDK에서 JNI 하네스 빌드 수정 |
