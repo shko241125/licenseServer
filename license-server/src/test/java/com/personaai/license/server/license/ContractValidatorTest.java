@@ -283,6 +283,13 @@ class ContractValidatorTest {
         assertThat(json).startsWith("{\"license_ver\":1,\"license_id\":\"");
         assertThat(json).contains("\"allowed_channels\":{\"total\":16,\"offline\":{\"sonastt\":8,\"sonaml\":4,\"sonaasr\":4},"
                 + "\"online\":{\"sonastt\":8,\"sonaasr\":2}}");
-        assertThat(json).contains("\"not_after\":\"9999-12-31T23:59:59Z\"").doesNotContain("grace").doesNotContain("format_version");
+        assertThat(json).contains("\"not_after\":\"9999-12-31T23:59:59Z\"");
+        // 서명 대상은 규격(license_ver 1) 키만: 최상위·validity 키 집합과 순서를 정확히 비교
+        java.util.Map<String, Object> root = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readValue(json, new tools.jackson.core.type.TypeReference<java.util.LinkedHashMap<String, Object>>() {});
+        assertThat(root.keySet()).containsExactly("license_ver", "license_id", "project_name", "license_type", "solution",
+                "site_id", "allowed_channels", "validity", "warning_notice");
+        assertThat(new java.util.ArrayList<Object>(((java.util.Map<?, ?>) root.get("validity")).keySet()))
+                .containsExactly("issued_at", "not_before", "not_after");
     }
 }

@@ -7,7 +7,7 @@ import java.util.UUID;
 /**
  * 발급 장부 1행. 두 형식이 공존한다(DB CHECK license_format_shape 로 한 행은 한 형식만):
  *  - license_ver 1: licenseVer = 1, solution·channelsTotal·channels(항목 → 세부 항목 → 상한) 사용
- *  - 이전 형식(format_version 1, 2026-10-06 이전 발급분): licenseVer = null, onlineStt·offlineStt·gracePeriodDays 사용
+ *  - 이전 형식(license_ver 없음, 2026-10-06 이전 발급분): licenseVer = null, onlineStt·offlineStt·gracePeriodDays 사용
  */
 public record LicenseRecord(
         long id, String licenseId, UUID submissionToken, Status status, String projectName, String licenseType,
@@ -21,7 +21,7 @@ public record LicenseRecord(
 
     public enum Status { PENDING, ISSUED, FAILED, VOID }
 
-    /** 이전 형식(format_version) 행. 새 SDK 는 이 파일을 받지 않는다(LICENSE_UNSUPPORTED_VERSION). */
+    /** 이전 형식(license_ver 없음) 행. 새 SDK 는 이 파일을 받지 않는다(LICENSE_INVALID_FIELD: license_ver). */
     public boolean legacy() {
         return licenseVer == null;
     }

@@ -31,7 +31,7 @@ licensectl issue -key /secure/stt-license-keys/private.key \
 - `license_type`은 `production`(운영), `trial`(시험·데모), `dev`(개발) 중 하나만 쓸 수 있다.
   - `production`은 `validity.not_after`가 반드시 `9999-12-31T23:59:59Z`(영구), `trial`·`dev`는 실제 종료일이어야 한다.
 - 채널은 `allowed_channels.total`(1~100000) + 이름 자유 항목 `{"세부 항목": 상한}`이다. 각 상한은 0~100000이고 `total` 이하, 하나 이상은 1 이상이어야 한다. 유예 기간은 없다.
-- 이전 형식 키(`format_version`, `online_stt`, `offline_stt`, `grace_period_days`)가 있으면 거부한다. 규격: [04-license-format.md](../../docs/sdk/04-license-format.md)
+- 규격에 없는 키(오타, 이전 형식의 `format_version`·`grace_period_days` 등)가 있으면 `<키>: unknown key`로 거부한다(엄격 발급). 규격: [04-license-format.md](../../docs/sdk/04-license-format.md)
 - 시각은 `YYYY-MM-DDTHH:MM:SSZ`(UTC) 형식만 받는다. KST 자정은 전날 `15:00:00Z`다.
 
 ## 3. 반입 전 확인 (필수)

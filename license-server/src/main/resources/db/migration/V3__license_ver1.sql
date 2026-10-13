@@ -1,6 +1,6 @@
 -- 라이선스 형식 license_ver 1 (계획서 §15, 2026-10-06).
 -- 새 형식: solution, allowed_channels.total + 엔진별 offline/online, 유예 없음, 운영은 영구(9999-12-31T23:59:59Z).
--- 이전 형식(format_version 1)으로 발급한 행은 지우지 않고 그대로 보존한다: 옛 열은 NULL 허용으로만 바꾼다.
+-- 이전 형식(license_ver 없음)으로 발급한 행은 지우지 않고 그대로 보존한다: 옛 열은 NULL 허용으로만 바꾼다.
 -- 권한: 앱 계정의 license 테이블 단위 SELECT·INSERT 는 새 열에도 적용된다. 열 단위 UPDATE 권한은 바꾸지 않는다.
 
 ALTER TABLE license ADD COLUMN license_ver INT CHECK (license_ver = 1);

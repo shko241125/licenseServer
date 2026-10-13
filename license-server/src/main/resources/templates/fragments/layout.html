@@ -73,9 +73,9 @@
     <span class="ch-eng" th:each="e : ${g.value}" th:text="${e.key} + ' ' + ${e.value}">세부 항목</span></span>
 </span>
 
-<!-- 장부 행의 채널: 이전 형식(format_version) 행은 옛 값 그대로 -->
+<!-- 장부 행의 채널: 이전 형식(license_ver 없음) 행은 옛 값 그대로 -->
 <span th:fragment="recordChannels(r)">
-  <th:block th:if="${r.legacy()}"><span class="badge badge-plain" title="format_version 1">이전 형식</span>
+  <th:block th:if="${r.legacy()}"><span class="badge badge-plain" title="license_ver 없음">이전 형식</span>
     <span class="small" th:text="'온라인 ' + ${r.onlineStt()} + ' / 오프라인 ' + ${r.offlineStt()}"></span></th:block>
   <!-- th:replace 는 th:if/unless 보다 먼저 실행되므로 조건은 감싸는 블록에 둔다 -->
   <th:block th:unless="${r.legacy()}"><span th:replace="~{fragments/layout :: channels(${r.channelsTotal()}, ${r.channels()})}"></span></th:block>

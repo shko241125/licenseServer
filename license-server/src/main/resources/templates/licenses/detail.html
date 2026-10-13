@@ -20,8 +20,8 @@
   <div class="alert alert-ok" role="status" th:if="${param.issued}"><div><span class="title">발급했습니다.</span> 파일을 내려받아 반입 절차에 따라 전달하세요.</div></div>
   <th:block th:replace="~{fragments/layout :: flash}"></th:block>
   <div class="alert alert-bad" role="alert" th:if="${lic.error()}"><div><span class="title">오류</span> <span th:text="${lic.error()}"></span></div></div>
-  <div class="alert alert-warn" th:if="${lic.legacy()}"><div><span class="title">이전 형식(format_version 1) 라이선스</span>
-    새 SDK(license_ver 1)는 이 파일을 받지 않습니다(<span class="mono">LICENSE_UNSUPPORTED_VERSION</span>). 필요하면 "이 건으로 갱신 발급"으로 새 형식을 발급하세요.</div></div>
+  <div class="alert alert-warn" th:if="${lic.legacy()}"><div><span class="title">이전 형식(license_ver 없음) 라이선스</span>
+    새 SDK(license_ver 1)는 이 파일을 받지 않습니다(<span class="mono">LICENSE_INVALID_FIELD</span>: license_ver). 필요하면 "이 건으로 갱신 발급"으로 새 형식을 발급하세요.</div></div>
   <div class="alert" th:if="${lic.voidReason()}"><div><span class="title">무효 처리됨</span> <span th:text="${lic.voidReason()} + ' (' + ${@fmt.kst(lic.voidedAt())} + ')'"></span></div></div>
 
   <div class="stack">

@@ -90,7 +90,13 @@ class IssueFlowIT extends IntegrationTestBase {
         assertThat(r.channels().get("offline")).containsExactly(java.util.Map.entry("sonastt", 8),
                 java.util.Map.entry("sonaml", 4), java.util.Map.entry("sonaasr", 4));   // DB 왕복 후에도 입력 순서
         assertThat(r.channels().get("online")).containsOnlyKeys("sonastt", "sonaasr");
-        assertThat(r.licenseText()).doesNotContain("grace").doesNotContain("format_version");
+        // 발급 파일은 규격(license_ver 1) 키 + signature 만 (licensectl 출력 순서)
+        java.util.Map<String, Object> issued = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readValue(r.licenseText(), new tools.jackson.core.type.TypeReference<java.util.LinkedHashMap<String, Object>>() {});
+        assertThat(issued.keySet()).containsExactly("license_ver", "license_id", "project_name", "license_type", "solution",
+                "site_id", "allowed_channels", "validity", "warning_notice", "signature");
+        assertThat(new java.util.ArrayList<Object>(((java.util.Map<?, ?>) issued.get("validity")).keySet()))
+                .containsExactly("issued_at", "not_before", "not_after");
 
         // 같은 제출 토큰 재전송 → 새로 발급하지 않고 같은 건 반환
         assertThat(issue.issue(f, admin(), "127.0.0.1").licenseId()).isEqualTo(r.licenseId());
