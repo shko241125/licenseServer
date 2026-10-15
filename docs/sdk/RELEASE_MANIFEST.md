@@ -20,7 +20,7 @@ SDK 패키지는 라이선스 **발급 서버와 분리해서** 발행합니다.
 | `integration/harness/` | JNI 참조 구현(★ = SDK로 옮길 부분) + Java 결합 테스트 | |
 | `integration/cmake-consumer/` | SDK 형태 CMake 소비자(연동 인수 테스트) | |
 | `scripts/check.sh` | 전체 검증 7단계 | |
-| `docs/sdk/` | 이 문서 묶음(README, 01~07, 이 목록) | |
+| `docs/sdk/` | 이 문서 묶음(README, 01~06, 이 목록) | |
 | `.gitattributes` | `*.sh` LF 줄바꿈 유지 | |
 | `README.md` *(생성)* | 패키지 루트 안내 → `docs/sdk/README.md` | |
 | `VERSION` *(생성)* | 버전과 원 저장소 커밋 | |
@@ -72,6 +72,6 @@ SDK 패키지는 라이선스 **발급 서버와 분리해서** 발행합니다.
 - [ ] `VERSION`의 커밋이 태그와 일치
 - [ ] `docs/sdk/README.md` 변경 이력에 이번 버전이 있음
 - [ ] 이전 버전 대비 `core/testdata/golden_*` 변경 없음(바뀌었다면 기존 라이선스 호환 영향 검토 기록)
-  - 2.0.0: 형식 변경으로 재생성(사용자 승인, 공개키 동일). 영향과 대응은 07-upgrade-2.0.md
+  - 2.0.0: 형식 변경으로 재생성(사용자 승인, 공개키 동일). SDK 적용 전이라 영향 없음
 - [ ] 오류 코드 순번 변경 없음(헤더 `static_assert`). 새 코드는 끝에만 추가(2.0.0: `1011`)
-- [ ] 호환 깨짐 버전이면 업그레이드 안내가 있음(2.0.0: 07-upgrade-2.0.md)
+- [ ] (SDK 적용 이후) 호환이 깨지는 버전이면 업그레이드 안내가 있음

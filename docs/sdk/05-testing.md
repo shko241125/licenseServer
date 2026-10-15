@@ -61,7 +61,7 @@ WSL에서는 리눅스 파일시스템(예: `~/work`)에 두고 실행합니다.
 | 다른 키로 서명 | 1004 | 1004 |
 | `project_name`에 이모지 포함 | 0 | 0 ← `GetStringUTFChars`를 쓰면 1003 |
 | 빈 문자열 / JSON 아님 | 1003 | 1003 |
-| 이전 형식(`format_version`, `license_ver` 없음) | 0 | 1005 |
+| `license_ver` 없음 | 0 | 1005 |
 | 운영(영구, `not_after` 9999-12-31T23:59:59Z) | 0 (SDK 만료 장치가 만료로 오판하지 않는지 확인) | 0 |
 | `license_id` 없는 새 형식(외부 도구 서명) | 0 | 1005 |
 | 기존 `sonaLicense.*.key` | 공존 설정 on: 기존 경로 성공 / off: 1003 | 동일 |
