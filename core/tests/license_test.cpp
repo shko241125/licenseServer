@@ -125,7 +125,6 @@ TEST(License, IssueAndVerifyRoundTrip) {
                       "      \"sonastt\": 8,\n      \"sonaml\": 4,\n      \"sonaasr\": 4\n    },\n"
                       "    \"online\": {\n      \"sonastt\": 8,\n      \"sonaasr\": 2\n    }\n  },"),
             std::string::npos) << text;
-  EXPECT_EQ(text.find("grace"), std::string::npos);
   EXPECT_NE(text.find(",\n  \"signature\": \""), std::string::npos);
   EXPECT_EQ(text.back(), '\n');
 }
@@ -292,9 +291,9 @@ TEST(License, SchemaValidationAfterSignature) {
   EXPECT_EQ(Verify(signed_json("9999-12-31T23:59:59Z", "9999-12-310T23:59:59Z")), Error::InvalidField);  // 요구 예시의 오타
   EXPECT_EQ(Verify(signed_json("9999-12-31T23:59:59Z", "2026-09-21T00:00:00Z")), Error::InvalidField);  // not_before == not_after
   EXPECT_EQ(Verify(signed_json("\"allowed_channels\":{", "\"allowed_channels\":true,\"x\":{")), Error::InvalidField);
-  // 모르는 필드는 서명에 포함되어 있으면 허용 (신규 발급기 ↔ 구버전 SDK 호환). 유예 키도 무시된다.
+  // 검증기는 모르는 필드를 허용·무시한다(서명에는 포함). 앞으로 선택 필드를 추가할 때를 위한 규칙
   EXPECT_EQ(Verify(signed_json(ver, ver + "\"future_field\":{\"x\":1},")), Error::Ok);
-  EXPECT_EQ(Verify(signed_json("\"not_after\":", "\"grace_period_days\":14,\"not_after\":")), Error::Ok);
+  EXPECT_EQ(Verify(signed_json("\"not_after\":", "\"extra_days\":14,\"not_after\":")), Error::Ok);
 }
 
 TEST(License, StateBoundaries) {
@@ -392,13 +391,9 @@ TEST(License, SignContractDefaultsAndChecks) {
   EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"not_after\":", "\"renew_after\":\"x\",\"not_after\":")),
             Error::InvalidField);
   EXPECT_EQ(detail, "validity.renew_after: unknown key (not in license_ver 1)");
-  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"not_after\":", "\"grace_period_days\":14,\"not_after\":")),
-            Error::InvalidField);
-  EXPECT_NE(detail.find("grace_period_days"), std::string::npos) << detail;
-  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"total\":16,", "\"total\":16,\"offline_stt\":8,")),
-            Error::InvalidField);
-  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"total\":16,", "\"total\":16,\"online_stt\":8,")),
-            Error::InvalidField);
+  EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"total\":16,", "\"total\":16,\"spare\":8,")),
+            Error::InvalidField);   // allowed_channels 의 항목 값은 객체여야 한다
+  EXPECT_EQ(detail, "allowed_channels.spare: must be an object");
 }
 
 // ---------- 골든 벡터 ----------

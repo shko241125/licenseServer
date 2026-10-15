@@ -94,13 +94,13 @@ TEST(VerifySignature, CanonicalJsonMatchesGolden) {
 TEST(VerifySignature, SignatureOnlyAcceptsNonStandardValues) {
   const std::string odd = SignRaw(
       "{\"license_ver\":7,\"allowed_channels\":{\"total\":999999},"
-      "\"validity\":{\"not_after\":\"sometime\"},\"custom\":{\"legacy_mode\":true}}");
+      "\"validity\":{\"not_after\":\"sometime\"},\"custom\":{\"beta_mode\":true}}");
   lic::VerifiedLicense v = VerifyOk(odd);
   std::int64_t n = 0;
   bool b = false;
   EXPECT_TRUE(v.GetInt("allowed_channels.total", &n));
   EXPECT_EQ(n, 999999);
-  EXPECT_TRUE(v.GetBool("custom.legacy_mode", &b));
+  EXPECT_TRUE(v.GetBool("custom.beta_mode", &b));
   EXPECT_TRUE(b);
   lic::LicenseFields f;
   std::string detail;
