@@ -16,6 +16,7 @@ import java.util.UUID;
  * 행 목록의 기본값은 비어 있다: 요청에 온 행만 쓰고, 기본 행은 새 폼을 보여 줄 때만 채운다(withDefaultEngines).
  * (필드 기본값에 행을 두면 요청에 없는 행이 그대로 남아 계약에 섞인다.)
  * 운영(production)은 종료 입력과 관계없이 영구(Contract.PERMANENT)로 발급한다.
+ * 1회 발급 기간 상한: 시험 180일, 개발 1년(366일). 개발은 총 개발기한(devUntilDate, 그날 23:59:59 KST)을 함께 받는다.
  */
 public class IssueForm {
     /** 새 폼에 기본으로 보여 줄 행(요구 예시). 항목·세부 항목 이름은 열린 목록이라 다른 이름도 입력할 수 있다. */
@@ -57,6 +58,7 @@ public class IssueForm {
     private String notAfterDate;
     private String notAfterTime = "23:59:59";
     private String warningNotice;
+    private String devUntilDate;
     private UUID submissionToken = UUID.randomUUID();
     private String renewedFrom;
 
@@ -108,7 +110,8 @@ public class IssueForm {
 
     /**
      * 갱신 발급: 원본 계약 내용을 채운다.
-     * 기간 — 시험·개발은 원본 종료 다음 날부터 1년, 운영(영구) 원본은 오늘부터.
+     * 기간 — 시험·개발은 원본 종료 다음 날부터, 운영(영구) 원본은 오늘부터.
+     * 종료 — 시험은 180일, 개발은 1년이되 총 개발기한을 넘지 않게(총 기한이 이미 지났으면 1년: 입력 검증이 연장을 요구).
      */
     public static IssueForm copyOf(LicenseRecord r, ZoneId zone, LocalDate today) {
         IssueForm f = new IssueForm();
@@ -121,8 +124,16 @@ public class IssueForm {
         f.total = r.channelsTotal();
         f.channels = rows(r.channels());
         LocalDate start = r.permanent() ? today : r.notAfter().atZone(zone).toLocalDate().plusDays(1);
+        LocalDate end = "trial".equals(r.licenseType())
+                ? start.plusDays(Contract.TRIAL_MAX.toDays() - 1)
+                : start.plusYears(1).minusDays(1);
+        if (r.devUntil() != null) {
+            LocalDate until = r.devUntil().atZone(zone).toLocalDate();
+            f.devUntilDate = until.toString();
+            if (until.isBefore(end) && !until.isBefore(start)) end = until;
+        }
         f.notBeforeDate = start.toString();
-        f.notAfterDate = start.plusYears(1).minusDays(1).toString();
+        f.notAfterDate = end.toString();
         return f;
     }
 
@@ -148,6 +159,8 @@ public class IssueForm {
     public void setNotAfterTime(String v) { notAfterTime = v; }
     public String getWarningNotice() { return warningNotice; }
     public void setWarningNotice(String v) { warningNotice = v; }
+    public String getDevUntilDate() { return devUntilDate; }
+    public void setDevUntilDate(String v) { devUntilDate = v; }
     public UUID getSubmissionToken() { return submissionToken; }
     public void setSubmissionToken(UUID v) { submissionToken = v; }
     public String getRenewedFrom() { return renewedFrom; }

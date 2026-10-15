@@ -36,7 +36,7 @@
 
   <div class="stack">
     <section class="card">
-      <div class="card-head"><div><h2>30일 내 만료 예정</h2><div class="sub">유예 기간 시작 전에 갱신본을 반입해야 합니다.</div></div></div>
+      <div class="card-head"><div><h2>30일 내 만료 예정</h2><div class="sub">유예 기간이 없으므로 만료 전에 갱신본을 반입해야 합니다. 이미 갱신 발급한 건은 표시하지 않습니다.</div></div></div>
       <div class="empty" th:if="${#lists.isEmpty(expiring)}"><div class="title">만료 예정인 라이선스가 없습니다</div></div>
       <div class="table-wrap" th:unless="${#lists.isEmpty(expiring)}">
         <table class="table">
@@ -46,7 +46,8 @@
             <td class="nowrap" th:text="${@fmt.kst(l.notAfter())}"></td>
             <td class="num"><span class="badge badge-plain" th:classappend="${d <= 7} ? 'badge-bad' : 'badge-warn'" th:text="${d} + '일'"></span></td>
             <td class="mono" th:text="${l.siteId()}"></td>
-            <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a></td>
+            <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a>
+              <div class="err" th:if="${l.devTermEnding()}" th:text="'총 개발기한 ' + ${@fmt.kst(l.devUntil())} + ' 도래 — 연장 계약 확인'"></div></td>
             <td class="num nowrap"><a class="btn btn-secondary btn-sm" th:href="@{/licenses/{id}(id=${l.licenseId()})}">상세</a>
               <a class="btn btn-sm" th:if="${roles.contains('ROLE_ISSUER')}" th:href="@{/licenses/new(from=${l.licenseId()})}">갱신 발급</a></td>
           </tr>

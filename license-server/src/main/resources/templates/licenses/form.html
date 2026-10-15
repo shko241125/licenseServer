@@ -16,7 +16,7 @@
   <div class="alert alert-warn" role="alert" th:if="${keyState.name() != 'UNSEALED'}">
     <div>서명 키가 <span th:replace="~{fragments/layout :: badge(${keyState})}"></span> 상태입니다. 입력·미리보기는 가능하지만 발급하려면 관리자가 키를 해제해야 합니다.</div></div>
   <div class="alert" th:if="${!#strings.isEmpty(form.renewedFrom)}">
-    <div>원본 라이선스 <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a>를 기준으로 채웠습니다. 시작일은 시험·개발이면 원본 종료 다음 날(종료는 기본 1년, 바꿀 수 있음), 영구(운영) 원본이면 오늘입니다.</div></div>
+    <div>원본 라이선스 <a class="mono" th:href="@{/licenses/{id}(id=${form.renewedFrom})}" th:text="${form.renewedFrom}"></a>를 기준으로 채웠습니다. 시작일은 시험·개발이면 원본 종료 다음 날, 영구(운영) 원본이면 오늘입니다. 종료는 시험 180일, 개발 1년(총 개발기한 안)으로 채웠고 바꿀 수 있습니다.</div></div>
 
   <form th:action="@{/licenses/preview}" th:object="${form}" method="post" class="card">
     <input type="hidden" th:field="*{submissionToken}">
@@ -67,7 +67,8 @@
 
     <section class="form-section">
       <div class="section-head"><h2>유효 기간 (KST)</h2>
-        <p>운영(production)은 <b>영구</b>(9999-12-31T23:59:59Z)로 발급되어 종료 입력을 쓰지 않습니다. 시험·개발은 종료일이 필요합니다. 유예 기간은 없습니다.</p></div>
+        <p>운영(production)은 <b>영구</b>(9999-12-31T23:59:59Z)로 발급되어 종료 입력을 쓰지 않습니다. 시험·개발은 종료일이 필요합니다. 유예 기간은 없습니다.</p>
+        <p>1회 발급 기간 상한: 시험(trial) <b>180일</b>, 개발(dev) <b>1년</b>. 개발은 <b>총 개발기한</b>(과제 전체 기간)을 함께 기록하고, 그 안에서 1년 이내로 갱신 발급합니다.</p></div>
       <div class="form-grid">
         <div class="field span-2"><span class="label req">시작</span>
           <div class="inline-fields">
@@ -80,6 +81,10 @@
             <input type="time" step="1" th:field="*{notAfterTime}" aria-label="종료 시각" th:aria-invalid="${errors['notAfter'] != null} ? 'true' : null"></div>
           <span class="hint">운영은 이 값을 무시하고 영구로 발급합니다.</span>
           <span class="field-error" th:text="${errors['notAfter']}"></span></div>
+        <div class="field span-2"><label for="devUntilDate">총 개발기한 (개발만, 그날 23:59:59까지)</label>
+          <input type="date" th:field="*{devUntilDate}" th:aria-invalid="${errors['devUntil'] != null} ? 'true' : null">
+          <span class="hint">개발(dev)은 필수입니다. 라이선스 파일에는 들어가지 않고 발급 기록에만 남습니다. 운영·시험은 이 값을 쓰지 않습니다.</span>
+          <span class="field-error" th:text="${errors['devUntil']}"></span></div>
       </div>
     </section>
 

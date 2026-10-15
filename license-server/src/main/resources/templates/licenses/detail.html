@@ -35,6 +35,8 @@
             <dt>채널</dt><dd><span th:replace="~{fragments/layout :: channels(${lic.channelsTotal()}, ${lic.channels()})}"></span></dd>
             <dt>시작</dt><dd><div th:text="${@fmt.kst(lic.notBefore())}"></div><div class="cell-sub" th:text="${@fmt.utc(lic.notBefore())}"></div></dd>
             <dt>종료</dt><dd><div th:text="${@fmt.end(lic.notAfter())}"></div><div class="cell-sub" th:text="${@fmt.utc(lic.notAfter())}"></div></dd>
+            <th:block th:if="${lic.devUntil()}"><dt>총 개발기한</dt><dd><div th:text="${@fmt.kst(lic.devUntil())}"></div>
+              <div class="err" th:if="${lic.devTermEnding()}">이 라이선스가 총 개발기한의 마지막 발급입니다. 계속 쓰려면 기한 연장 계약을 확인하세요.</div></dd></th:block>
           </dl>
         </div>
       </section>

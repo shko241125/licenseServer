@@ -32,6 +32,7 @@
         <dl class="kv">
           <dt>시작</dt><dd><div th:text="${@fmt.kst(contract.notBefore())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notBefore())}"></div></dd>
           <dt>종료</dt><dd><div th:text="${@fmt.end(contract.notAfter())}"></div><div class="cell-sub" th:text="${@fmt.utc(contract.notAfter())}"></div></dd>
+          <th:block th:if="${contract.devUntil()}"><dt>총 개발기한</dt><dd><div th:text="${@fmt.kst(contract.devUntil())}"></div><div class="cell-sub">발급 기록 전용(파일에 넣지 않음)</div></dd></th:block>
         </dl>
       </div>
     </section>
@@ -50,7 +51,7 @@
     <input type="hidden" th:field="*{notBeforeDate}">
     <input type="hidden" th:field="*{notBeforeTime}"><input type="hidden" th:field="*{notAfterDate}">
     <input type="hidden" th:field="*{notAfterTime}">
-    <input type="hidden" th:field="*{warningNotice}">
+    <input type="hidden" th:field="*{warningNotice}"><input type="hidden" th:field="*{devUntilDate}">
     <div class="card-foot">
       <button type="submit" th:disabled="${keyState.name() != 'UNSEALED'}">발급</button>
       <button type="submit" th:formaction="@{/licenses/edit}" class="btn-secondary" formnovalidate>수정</button>

@@ -1,5 +1,6 @@
 package com.personaai.license.server.license;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -19,7 +20,7 @@ import java.util.regex.Pattern;
  * 입력 편의용 검증(즉시 피드백). 최종 판정은 licensectl(SignContract) 이 한다.
  * 규칙은 core/src/license.cpp ExtractFields·SignContract(license_ver 1)와 같게 유지하며, 경계값 테스트
  * (ValidationParityTest)로 일치를 확인한다. 서버가 더 엄격한 곳: 시험·개발의 9999년 종료일 거부,
- * (항목, 세부 항목) 중복 행, 이름 없이 상한만 있는 행.
+ * (항목, 세부 항목) 중복 행, 이름 없이 상한만 있는 행, 개발의 총 개발기한(서버 기록 전용 — 코어는 모름).
  */
 public final class ContractValidator {
     /** 발급 유형(순서 = 화면 선택 순서): 운영(영구) · 시험/데모 · 개발. */
@@ -63,6 +64,26 @@ public final class ContractValidator {
             }
         }
         if (nb != null && na != null && !e.containsKey("notAfter") && !nb.isBefore(na)) e.put("notAfter", "종료는 시작보다 뒤여야 합니다.");
+        // 1회 발급 기간 상한(코어 SignContract 와 같음): 시험 180일, 개발 366일(1년, 윤년 포함)
+        if (nb != null && na != null && !e.containsKey("notAfter")) {
+            if ("trial".equals(type) && Duration.between(nb, na).compareTo(Contract.TRIAL_MAX) > 0) {
+                e.put("notAfter", "시험(trial)은 1회 180일 이내로 발급합니다(종료 − 시작). 더 필요하면 갱신 발급하세요.");
+            } else if ("dev".equals(type) && Duration.between(nb, na).compareTo(Contract.DEV_MAX) > 0) {
+                e.put("notAfter", "개발(dev)은 1회 1년(366일) 이내로 발급합니다. 총 개발기한 안에서 갱신 발급하세요.");
+            }
+        }
+        // 개발: 총 개발기한(그날 23:59:59 KST) 필수, 발급 종료는 그 안이어야 한다. 다른 유형은 입력을 쓰지 않는다.
+        Instant devUntil = null;
+        if ("dev".equals(type)) {
+            if (f.getDevUntilDate() == null || f.getDevUntilDate().isBlank()) {
+                e.put("devUntil", "개발(dev)은 총 개발기한이 필수입니다.");
+            } else {
+                devUntil = instant(e, "devUntil", f.getDevUntilDate(), "23:59:59", zone);
+                if (devUntil != null && na != null && !e.containsKey("notAfter") && na.isAfter(devUntil)) {
+                    e.put("devUntil", "발급 종료가 총 개발기한을 넘습니다. 과제 기한이 연장됐다면 총 개발기한을 고치세요.");
+                }
+            }
+        }
         if (f.getRenewedFrom() != null && !f.getRenewedFrom().isEmpty() && !f.getRenewedFrom().matches("[0-9a-f]{32}")) {
             e.put("renewedFrom", "잘못된 원본 라이선스 ID");
         }
@@ -76,7 +97,7 @@ public final class ContractValidator {
         if (sum < total) w.add("세부 항목 상한의 합(" + sum + ")이 total(" + total + ")보다 작아 total 까지 쓸 수 없습니다.");
         Contract c = new Contract(f.getProjectName().strip(), type, f.getSolution().strip(), f.getSiteId().strip(),
                 total, channels, now.truncatedTo(ChronoUnit.SECONDS), nb, na, f.getWarningNotice().strip(),
-                f.getRenewedFrom() == null || f.getRenewedFrom().isEmpty() ? null : f.getRenewedFrom());
+                f.getRenewedFrom() == null || f.getRenewedFrom().isEmpty() ? null : f.getRenewedFrom(), devUntil);
         return new Result(c, e, w);
     }
 

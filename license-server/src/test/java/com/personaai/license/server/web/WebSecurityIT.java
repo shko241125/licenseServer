@@ -256,8 +256,11 @@ class WebSecurityIT extends IntegrationTestBase {
                     .param("channels[1].group", "").param("channels[1].name", "").param("channels[1].count", "0")
                     .param("channels[2].group", "online").param("channels[2].name", "sonaasr").param("channels[2].count", "2")
                     .param("channels[3].group", "streaming_rt").param("channels[3].name", "sonastt").param("channels[3].count", "1")  // 사용자 정의 항목
-                    .param("notBeforeDate", "2026-01-01")
-                    .param("notBeforeTime", "00:00").param("notAfterDate", "2099-12-31").param("notAfterTime", "23:59:59")
+                    // 지금 유효한 시험 라이선스(1회 상한 180일 안): 어제 ~ 90일 뒤
+                    .param("notBeforeDate", java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).minusDays(1).toString())
+                    .param("notBeforeTime", "00:00")
+                    .param("notAfterDate", java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(90).toString())
+                    .param("notAfterTime", "23:59:59")
                     .param("warningNotice", "notice");
             MvcResult issued = mvc.perform(form).andExpect(status().is3xxRedirection()).andReturn();
             String location = issued.getResponse().getRedirectedUrl();

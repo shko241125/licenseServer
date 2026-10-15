@@ -26,6 +26,7 @@ class DatabaseGuardIT extends IntegrationTestBase {
                 .query(String.class).list();
         assertThat(cols).contains("license_ver", "solution", "channels_total", "channels_json")
                 .doesNotContain("online_stt", "offline_stt", "grace_period_days");
+        assertThat(cols).contains("dev_until");   // V6: 총 개발기한(서버 기록 전용, NULL 허용)
         String missingSolution = """
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   license_ver, channels_total, channels_json, issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by)
@@ -64,6 +65,51 @@ class DatabaseGuardIT extends IntegrationTestBase {
             assertThatThrownBy(() -> jdbc.sql(insert).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
                     type, "0".repeat(64), adminId()).update()).as(type).hasMessageContaining("license_type_check");
         }
+    }
+
+    /** 총 개발기한(V6): 개발만, 발급 종료 이후여야 하고, 계약 열처럼 바꿀 수 없다. */
+    @Test
+    void devUntilOnlyForDevCoveringNotAfterAndImmutable() throws Exception {
+        String insert = """
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  license_ver, solution, channels_total, channels_json,
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by, dev_until)
+                VALUES (?, ?, 'PENDING', 'p', ?, 's', 1, 'x', 3, '{"offline":{"sonastt":3}}',
+                  now(), now(), now() + interval '1 day', 'w', ?, ?, now() + CAST(? AS INTERVAL))""";
+        String id = UUID.randomUUID().toString().replace("-", "");
+        jdbc.sql(insert).params(id, UUID.randomUUID(), "dev", "0".repeat(64), adminId(), "2 years").update();
+        assertThat(licenses.findByLicenseId(id).orElseThrow().devUntil()).isNotNull();
+        for (String[] bad : new String[][] {{"trial", "2 years"}, {"production", "2 years"}, {"dev", "1 hour"}}) {
+            assertThatThrownBy(() -> jdbc.sql(insert).params(UUID.randomUUID().toString().replace("-", ""), UUID.randomUUID(),
+                    bad[0], "0".repeat(64), adminId(), bad[1]).update()).as(bad[0] + " " + bad[1])
+                    .hasMessageContaining("license_dev_until_check");
+        }
+        assertDenied(() -> jdbc.sql("UPDATE license SET dev_until = now() + interval '9 years' WHERE license_id = ?").param(id).update());
+        try (var c = ownerConnection(); var st = c.createStatement()) {
+            assertThatThrownBy(() -> st.executeUpdate("UPDATE license SET dev_until = now() + interval '9 years' WHERE license_id='" + id + "'"))
+                    .hasMessageContaining("immutable");
+        }
+    }
+
+    /** 만료 예정 목록은 이미 갱신 발급(ISSUED)된 원본을 뺀다. 갱신본이 실패·대기면 원본을 계속 보여 준다. */
+    @Test
+    void expiringListSkipsRenewedOriginals() {
+        String original = insertIssued();
+        java.time.Instant now = java.time.Instant.now();
+        var window = java.time.Duration.ofDays(30);
+        assertThat(licenses.expiringBetween(now, now.plus(window))).extracting(r -> r.licenseId()).contains(original);
+        String renewal = UUID.randomUUID().toString().replace("-", "");
+        jdbc.sql("""
+                INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
+                  license_ver, solution, channels_total, channels_json,
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, issued_by, renewed_from)
+                VALUES (?, ?, 'PENDING', 'p', 'trial', 's', 1, 'x', 3, '{"offline":{"sonastt":3}}',
+                  now(), now() + interval '1 day', now() + interval '90 days', 'w', ?, ?, ?)""")
+                .params(renewal, UUID.randomUUID(), "0".repeat(64), adminId(), original).update();
+        assertThat(licenses.expiringBetween(now, now.plus(window))).extracting(r -> r.licenseId()).contains(original);
+        jdbc.sql("UPDATE license SET status='ISSUED', license_text='x', license_sha256=? WHERE license_id=?")
+                .params("1".repeat(64), renewal).update();
+        assertThat(licenses.expiringBetween(now, now.plus(window))).extracting(r -> r.licenseId()).doesNotContain(original);
     }
 
     long adminId() {

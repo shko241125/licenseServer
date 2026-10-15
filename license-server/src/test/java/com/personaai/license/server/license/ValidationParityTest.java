@@ -115,10 +115,20 @@ class ValidationParityTest {
                 c("korean text", f -> f.setProjectName("음성인식 고도화 \"2026\"")),
                 c("trial same instant", f -> { f.setLicenseType("trial"); f.setNotAfterDate(f.getNotBeforeDate()); f.setNotAfterTime(f.getNotBeforeTime()); }),
                 c("trial one second", f -> { f.setLicenseType("trial"); f.setNotAfterDate(f.getNotBeforeDate()); f.setNotAfterTime("00:00:01"); }),
+                // 1회 발급 기간 상한(시작 2026-10-01 00:00 KST): 시험 180일, 개발 366일 — 경계값 허용, 1초 초과 거부
+                c("trial exactly 180 days", f -> { f.setLicenseType("trial"); f.setNotAfterDate("2027-03-30"); f.setNotAfterTime("00:00:00"); }),
+                c("trial 180 days + 1s", f -> { f.setLicenseType("trial"); f.setNotAfterDate("2027-03-30"); f.setNotAfterTime("00:00:01"); }),
+                c("dev exactly 366 days", f -> { f.setLicenseType("dev"); f.setNotAfterDate("2027-10-02"); f.setNotAfterTime("00:00:00"); }),
+                c("dev 366 days + 1s", f -> { f.setLicenseType("dev"); f.setNotAfterDate("2027-10-02"); f.setNotAfterTime("00:00:01"); }),
+                c("dev 5 years in one license", f -> { f.setLicenseType("dev"); f.setNotAfterDate("2031-09-30"); f.setNotAfterTime("23:59:59"); }),
+                c("trial ends in year 9999 (exceeds cap)", f -> { f.setLicenseType("trial"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
+                c("dev ends in year 9999 (exceeds cap)", f -> { f.setLicenseType("dev"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
                 // 서버가 의도적으로 더 엄격한 경우
-                stricter("trial ends in year 9999", f -> { f.setLicenseType("trial"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
-                stricter("dev ends in year 9999", f -> { f.setLicenseType("dev"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
-                stricter("duplicate item row", f -> row(f, 5, "offline", "sonastt", 1)));
+                stricter("trial within cap in year 9999", f -> { f.setLicenseType("trial"); f.setNotBeforeDate("9999-10-01"); f.setNotAfterDate("9999-12-31"); f.setNotAfterTime("23:59:59"); }),
+                stricter("duplicate item row", f -> row(f, 5, "offline", "sonastt", 1)),
+                // 총 개발기한은 서버 기록 전용(코어는 모름)
+                stricter("dev without dev_until", f -> { f.setLicenseType("dev"); f.setDevUntilDate(""); }),
+                stricter("dev ends after dev_until", f -> { f.setLicenseType("dev"); f.setDevUntilDate("2027-01-31"); }));
     }
 
     @ParameterizedTest(name = "{0}")

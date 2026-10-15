@@ -55,7 +55,7 @@ public class LicenseRepository {
                 rs.getInt("channels_total"), channels(rs.getString("channels_json")),
                 rs.getString("license_text"), rs.getString("license_sha256"), rs.getString("public_key_fp"),
                 rs.getString("renewed_from"), rs.getLong("issued_by"), rs.getString("issued_by_name"),
-                rs.getString("error"), rs.getString("void_reason"), ts(rs, "voided_at"), ts(rs, "created_at"));
+                rs.getString("error"), rs.getString("void_reason"), ts(rs, "voided_at"), ts(rs, "created_at"), ts(rs, "dev_until"));
     }
 
     /** 새 PENDING 행. 같은 제출 토큰이 이미 있으면 false(이중 제출). */
@@ -63,13 +63,13 @@ public class LicenseRepository {
         return jdbc.sql("""
                 INSERT INTO license (license_id, submission_token, status, project_name, license_type, site_id,
                   license_ver, solution, channels_total, channels_json,
-                  issued_at, not_before, not_after, warning_notice, public_key_fp, renewed_from, issued_by)
-                VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  issued_at, not_before, not_after, warning_notice, public_key_fp, renewed_from, issued_by, dev_until)
+                VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (submission_token) DO NOTHING""")
                 .params(licenseId, token, c.projectName(), c.licenseType(), c.siteId(),
                         Contract.LICENSE_VER, c.solution(), c.total(), c.channelsJson(),
                         odt(c.issuedAt()), odt(c.notBefore()), odt(c.notAfter()),
-                        c.warningNotice(), publicKeyFp, c.renewedFrom(), issuedBy)
+                        c.warningNotice(), publicKeyFp, c.renewedFrom(), issuedBy, odt(c.devUntil()))
                 .update() == 1;
     }
 
@@ -109,8 +109,12 @@ public class LicenseRepository {
                 .query(LicenseRepository::map).list();
     }
 
+    /** 기간 안에 끝나는 유효 라이선스. 이미 갱신 발급(ISSUED)된 원본은 빼서, 남은 알림이 모두 할 일이 되게 한다. */
     public List<LicenseRecord> expiringBetween(Instant from, Instant to) {
-        return jdbc.sql(SELECT + "WHERE l.status = 'ISSUED' AND l.not_after BETWEEN ? AND ? ORDER BY l.not_after")
+        return jdbc.sql(SELECT + """
+                WHERE l.status = 'ISSUED' AND l.not_after BETWEEN ? AND ?
+                  AND NOT EXISTS (SELECT 1 FROM license r WHERE r.renewed_from = l.license_id AND r.status = 'ISSUED')
+                ORDER BY l.not_after""")
                 .params(odt(from), odt(to)).query(LicenseRepository::map).list();
     }
 

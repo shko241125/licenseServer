@@ -76,6 +76,7 @@ public class IssueService {
                     "license_ver", Contract.LICENSE_VER, "solution", c.solution(), "total", c.total(),
                     "channels", c.channels(), "not_after", Contract.utc(c.notAfter())));
             if (c.renewedFrom() != null) detail.put("renewed_from", c.renewedFrom()); // 없으면 키를 넣지 않는다("null" 문자열 방지)
+            if (c.devUntil() != null) detail.put("dev_until", Contract.utc(c.devUntil()));
             audit.record(by.getUsername(), "ISSUE", licenseId, ip, detail);
         } catch (LicensectlException | IllegalStateException e) {
             String name = e instanceof LicensectlException le ? le.errorName() : "KEY_SEALED";

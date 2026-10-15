@@ -26,7 +26,8 @@ class ContractValidatorTest {
         int[] counts = {8, 4, 4, 8, 2};
         for (int i = 0; i < counts.length; i++) f.getChannels().get(i).setCount(counts[i]);
         f.setNotBeforeDate("2026-10-01");
-        f.setNotAfterDate("2027-09-30");
+        f.setNotAfterDate("2027-03-29");      // 시작 + 180일 - 1초(시험 상한 안). 운영은 무시
+        f.setDevUntilDate("2029-09-30");      // 개발만 사용(총 개발기한)
         f.setWarningNotice("notice");
         return f;
     }
@@ -43,7 +44,7 @@ class ContractValidatorTest {
         assertThat(r.errors()).isEmpty();
         Contract c = r.contract();
         assertThat(Contract.utc(c.notBefore())).isEqualTo("2026-09-30T15:00:00Z"); // KST 자정 = 전날 15시 UTC
-        assertThat(c.notAfter()).isEqualTo(Contract.PERMANENT);                    // 종료 입력(2027-09-30)은 무시
+        assertThat(c.notAfter()).isEqualTo(Contract.PERMANENT);                    // 종료 입력(2027-03-29)은 무시
         assertThat(c.permanent()).isTrue();
         assertThat(c.issuedAt()).isEqualTo(NOW);
         assertThat(c.solution()).isEqualTo("sonastt-universal");
@@ -59,8 +60,9 @@ class ContractValidatorTest {
     void trialUsesEnteredEnd() {
         var r = ContractValidator.validate(trial(), KST, NOW);
         assertThat(r.errors()).isEmpty();
-        assertThat(Contract.utc(r.contract().notAfter())).isEqualTo("2027-09-30T14:59:59Z");
+        assertThat(Contract.utc(r.contract().notAfter())).isEqualTo("2027-03-29T14:59:59Z");
         assertThat(r.contract().permanent()).isFalse();
+        assertThat(r.contract().devUntil()).isNull();   // 총 개발기한 입력은 개발만 쓴다
     }
 
     @Test
@@ -81,17 +83,46 @@ class ContractValidatorTest {
     }
 
     @Test
-    void longTrialAndDevPeriodsAreNormal() {
-        // 정부과제 등 2~5년 단위 시험·개발 라이선스: 오류도, 기간 경고도 없다(상한은 9999년 이후 종료 거부뿐)
-        for (String type : new String[] {"trial", "dev"}) {
-            IssueForm f = trial();
-            f.setLicenseType(type);
-            f.setNotBeforeDate("2026-10-01");
-            f.setNotAfterDate("2031-09-30");      // 5년
-            var r = ContractValidator.validate(f, KST, NOW);
-            assertThat(r.errors()).as(type).isEmpty();
-            assertThat(r.warnings()).as(type).isEmpty();
-        }
+    void periodCapsTrial180DaysDev1Year() {
+        // 시작 2026-10-01 00:00 KST. 경계값(정확히 180일 / 366일)은 허용, 1초 넘으면 거부(코어와 같음)
+        IssueForm f = trial();
+        f.setNotAfterDate("2027-03-30");
+        f.setNotAfterTime("00:00:00");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).isEmpty();
+        f.setNotAfterTime("00:00:01");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("notAfter");
+        f = valid();
+        f.setLicenseType("dev");
+        f.setNotAfterDate("2027-10-02");
+        f.setNotAfterTime("00:00:00");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).isEmpty();
+        f.setNotAfterTime("00:00:01");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("notAfter");
+        // 정부과제 등 2~5년 과제: 총 개발기한으로 기록하고 1년 단위로 발급한다
+        f.setNotAfterDate("2031-09-30");
+        f.setNotAfterTime("23:59:59");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("notAfter");
+    }
+
+    @Test
+    void devRequiresDevUntilCoveringNotAfter() {
+        IssueForm f = valid();
+        f.setLicenseType("dev");
+        var r = ContractValidator.validate(f, KST, NOW);
+        assertThat(r.errors()).isEmpty();
+        assertThat(Contract.utc(r.contract().devUntil())).isEqualTo("2029-09-30T14:59:59Z");   // 그날 23:59:59 KST
+        assertThat(new String(r.contract().toJson("0".repeat(32)), java.nio.charset.StandardCharsets.UTF_8))
+                .doesNotContain("dev_until").doesNotContain("2029-09-30");                   // 서명 대상 아님
+        f.setDevUntilDate(" ");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("devUntil");
+        f.setDevUntilDate("2027-02-30");
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("devUntil");
+        f.setDevUntilDate("2027-03-29");                                                     // 종료와 같은 날: 허용
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).isEmpty();
+        f.setDevUntilDate("2027-03-28");                                                     // 종료가 총 기한을 넘음
+        assertThat(ContractValidator.validate(f, KST, NOW).errors()).containsKey("devUntil");
+        f = valid();                                                                          // 운영: 입력을 쓰지 않음
+        assertThat(ContractValidator.validate(f, KST, NOW).contract().devUntil()).isNull();
     }
 
     @Test
@@ -100,9 +131,47 @@ class ContractValidatorTest {
         for (String type : ContractValidator.TYPES) {
             LicenseRecord rec = new LicenseRecord(1, "0".repeat(32), null, LicenseRecord.Status.ISSUED, c.projectName(),
                     type, c.siteId(), c.issuedAt(), c.notBefore(), c.notAfter(), c.warningNotice(), 1, c.solution(),
-                    c.total(), c.channels(), "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
+                    c.total(), c.channels(), "text", "sha", "fp", null, 1, "admin", null, null, null, NOW, null);
             assertThat(IssueForm.copyOf(rec, KST, java.time.LocalDate.of(2026, 10, 13)).getLicenseType()).isEqualTo(type);
         }
+    }
+
+    @Test
+    void renewalPeriodFollowsTypeCapsAndDevUntil() {
+        java.time.LocalDate today = java.time.LocalDate.of(2026, 10, 13);
+        java.util.function.BiFunction<String, Instant, IssueForm> renew = (type, until) -> IssueForm.copyOf(
+                new LicenseRecord(1, "0".repeat(32), null, LicenseRecord.Status.ISSUED, "p", type, "s", NOW,
+                        Instant.parse("2026-09-30T15:00:00Z"), Instant.parse("2026-12-31T14:59:59Z"), "n", 1, "sol", 1,
+                        java.util.Map.of("offline", java.util.Map.of("sonastt", 1)), "t", "h", "fp", null, 1, "a",
+                        null, null, null, NOW, until), KST, today);
+        IssueForm t = renew.apply("trial", null);                                  // 원본 종료 2026-12-31 KST
+        assertThat(t.getNotBeforeDate()).isEqualTo("2027-01-01");
+        assertThat(t.getNotAfterDate()).isEqualTo("2027-06-29");                   // 180일 - 1초
+        IssueForm d = renew.apply("dev", Instant.parse("2029-12-31T14:59:59Z"));
+        assertThat(d.getNotAfterDate()).isEqualTo("2027-12-31");                   // 1년
+        assertThat(d.getDevUntilDate()).isEqualTo("2029-12-31");
+        d = renew.apply("dev", Instant.parse("2027-05-31T14:59:59Z"));
+        assertThat(d.getNotAfterDate()).isEqualTo("2027-05-31");                   // 총 개발기한에서 끝남
+        d = renew.apply("dev", Instant.parse("2026-12-31T14:59:59Z"));            // 총 기한 소진: 1년 제안 → 검증이 연장 요구
+        assertThat(d.getNotAfterDate()).isEqualTo("2027-12-31");
+        assertThat(ContractValidator.validate(d, KST, NOW).errors()).containsKey("devUntil");
+        for (String type : new String[] {"trial", "dev"}) {
+            IssueForm f = renew.apply(type, "dev".equals(type) ? Instant.parse("2029-12-31T14:59:59Z") : null);
+            f.setTotal(1);
+            assertThat(ContractValidator.validate(f, KST, NOW).errors()).as(type).isEmpty();   // 채운 값은 그대로 발급 가능
+        }
+    }
+
+    @Test
+    void devTermEndingFlagsLastLicenseInTerm() {
+        Instant na = Instant.parse("2027-05-31T14:59:59Z");
+        java.util.function.Function<Instant, LicenseRecord> rec = until -> new LicenseRecord(1, "0".repeat(32), null,
+                LicenseRecord.Status.ISSUED, "p", "dev", "s", NOW, NOW, na, "n", 1, "sol", 1, java.util.Map.of(),
+                "t", "h", "fp", null, 1, "a", null, null, null, NOW, until);
+        assertThat(rec.apply(na).devTermEnding()).isTrue();                        // 종료 = 총 기한
+        assertThat(rec.apply(na.plusSeconds(86_399)).devTermEnding()).isTrue();    // 다음 날 23:59:58 까지
+        assertThat(rec.apply(na.plusSeconds(86_400)).devTermEnding()).isFalse();   // 하루 이상 남음
+        assertThat(rec.apply(null).devTermEnding()).isFalse();                     // 기록 없음(V6 이전)
     }
 
     @Test
@@ -148,7 +217,7 @@ class ContractValidatorTest {
     @Test
     void contractRejectsTotalAsGroupName() {
         assertThatThrownBy(() -> new Contract("p", "trial", "s", "site", 1,
-                java.util.Map.of("total", java.util.Map.of("a", 1)), NOW, NOW, NOW.plusSeconds(1), "n", null))
+                java.util.Map.of("total", java.util.Map.of("a", 1)), NOW, NOW, NOW.plusSeconds(1), "n", null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -253,7 +322,7 @@ class ContractValidatorTest {
         Contract c = ContractValidator.validate(f, KST, NOW).contract();
         LicenseRecord rec = new LicenseRecord(1, "0".repeat(32), null, LicenseRecord.Status.ISSUED, c.projectName(),
                 c.licenseType(), c.siteId(), c.issuedAt(), c.notBefore(), c.notAfter(), c.warningNotice(), 1, c.solution(),
-                c.total(), c.channels(), "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
+                c.total(), c.channels(), "text", "sha", "fp", null, 1, "admin", null, null, null, NOW, null);
         IssueForm copy = IssueForm.copyOf(rec, KST, java.time.LocalDate.of(2026, 10, 7));
         assertThat(copy.getChannels()).hasSize(IssueForm.MIN_ROWS);   // 6행 + 빈 행 → 최소 10
         assertThat(copy.getChannels().get(5).getGroup()).isEqualTo("streaming");
@@ -264,7 +333,7 @@ class ContractValidatorTest {
     void warnings() {
         IssueForm f = trial();
         f.setNotBeforeDate("2026-01-01");
-        f.setNotAfterDate("2026-06-30");
+        f.setNotAfterDate("2026-06-29");     // 180일 - 1초(시험 상한 안)
         var r = ContractValidator.validate(f, KST, NOW);
         assertThat(r.errors()).isEmpty();
         assertThat(r.warnings()).hasSize(2); // 과거 시작, 이미 종료
