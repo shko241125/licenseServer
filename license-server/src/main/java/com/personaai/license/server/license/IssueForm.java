@@ -109,7 +109,6 @@ public class IssueForm {
     /**
      * 갱신 발급: 원본 계약 내용을 채운다.
      * 기간 — 시험·개발은 원본 종료 다음 날부터 1년, 운영(영구) 원본은 오늘부터.
-     * 이전 형식(license_ver 없음) 원본은 채널 값을 옮길 수 없어(형식이 다름) 기본 행만 둔다.
      */
     public static IssueForm copyOf(LicenseRecord r, ZoneId zone, LocalDate today) {
         IssueForm f = new IssueForm();
@@ -118,13 +117,9 @@ public class IssueForm {
         f.siteId = r.siteId();
         f.warningNotice = r.warningNotice();
         f.renewedFrom = r.licenseId();
-        if (r.legacy()) {
-            f.withDefaultEngines();
-        } else {
-            f.solution = r.solution();
-            f.total = r.channelsTotal();
-            f.channels = rows(r.channels());
-        }
+        f.solution = r.solution();
+        f.total = r.channelsTotal();
+        f.channels = rows(r.channels());
         LocalDate start = r.permanent() ? today : r.notAfter().atZone(zone).toLocalDate().plusDays(1);
         f.notBeforeDate = start.toString();
         f.notAfterDate = start.plusYears(1).minusDays(1).toString();

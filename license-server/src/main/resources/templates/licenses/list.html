@@ -32,7 +32,7 @@
           <td><a class="cell-main" th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a>
             <div class="cell-sub mono" th:text="${l.siteId()}"></div></td>
           <td><span th:replace="~{fragments/layout :: badge(${l.licenseType()})}"></span></td>
-          <td><span th:replace="~{fragments/layout :: recordChannels(${l})}"></span></td>
+          <td><span th:replace="~{fragments/layout :: channels(${l.channelsTotal()}, ${l.channels()})}"></span></td>
           <td class="nowrap" th:text="${@fmt.end(l.notAfter())}"></td>
           <td th:text="${l.issuedByName()}"></td></tr>
         </tbody>

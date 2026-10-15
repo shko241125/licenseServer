@@ -20,8 +20,6 @@
   <div class="alert alert-ok" role="status" th:if="${param.issued}"><div><span class="title">발급했습니다.</span> 파일을 내려받아 반입 절차에 따라 전달하세요.</div></div>
   <th:block th:replace="~{fragments/layout :: flash}"></th:block>
   <div class="alert alert-bad" role="alert" th:if="${lic.error()}"><div><span class="title">오류</span> <span th:text="${lic.error()}"></span></div></div>
-  <div class="alert alert-warn" th:if="${lic.legacy()}"><div><span class="title">이전 형식(license_ver 없음) 라이선스</span>
-    새 SDK(license_ver 1)는 이 파일을 받지 않습니다(<span class="mono">LICENSE_INVALID_FIELD</span>: license_ver). 필요하면 "이 건으로 갱신 발급"으로 새 형식을 발급하세요.</div></div>
   <div class="alert" th:if="${lic.voidReason()}"><div><span class="title">무효 처리됨</span> <span th:text="${lic.voidReason()} + ' (' + ${@fmt.kst(lic.voidedAt())} + ')'"></span></div></div>
 
   <div class="stack">
@@ -33,11 +31,10 @@
             <dt>프로젝트</dt><dd th:text="${lic.projectName()}"></dd>
             <dt>사이트</dt><dd class="mono" th:text="${lic.siteId()}"></dd>
             <dt>유형</dt><dd><span th:replace="~{fragments/layout :: badge(${lic.licenseType()})}"></span></dd>
-            <th:block th:unless="${lic.legacy()}"><dt>솔루션</dt><dd class="mono" th:text="${lic.solution()}"></dd></th:block>
-            <dt>채널</dt><dd><span th:replace="~{fragments/layout :: recordChannels(${lic})}"></span></dd>
+            <dt>솔루션</dt><dd class="mono" th:text="${lic.solution()}"></dd>
+            <dt>채널</dt><dd><span th:replace="~{fragments/layout :: channels(${lic.channelsTotal()}, ${lic.channels()})}"></span></dd>
             <dt>시작</dt><dd><div th:text="${@fmt.kst(lic.notBefore())}"></div><div class="cell-sub" th:text="${@fmt.utc(lic.notBefore())}"></div></dd>
             <dt>종료</dt><dd><div th:text="${@fmt.end(lic.notAfter())}"></div><div class="cell-sub" th:text="${@fmt.utc(lic.notAfter())}"></div></dd>
-            <th:block th:if="${lic.legacy()}"><dt>유예 종료</dt><dd th:text="${@fmt.kst(lic.graceUntil())} + ' (' + ${lic.gracePeriodDays()} + '일, 이전 형식)'"></dd></th:block>
           </dl>
         </div>
       </section>

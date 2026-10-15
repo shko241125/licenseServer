@@ -67,7 +67,7 @@
             <td><span th:replace="~{fragments/layout :: badge(${l.status()})}"></span></td>
             <td><a th:href="@{/licenses/{id}(id=${l.licenseId()})}" th:text="${l.projectName()}"></a></td>
             <td class="mono" th:text="${l.siteId()}"></td>
-            <td><span th:replace="~{fragments/layout :: recordChannels(${l})}"></span></td>
+            <td><span th:replace="~{fragments/layout :: channels(${l.channelsTotal()}, ${l.channels()})}"></span></td>
             <td th:text="${l.issuedByName()}"></td>
           </tr>
           </tbody>

@@ -41,9 +41,8 @@ public class LicenseRepository {
         return i == null ? null : OffsetDateTime.ofInstant(i, ZoneOffset.UTC);
     }
 
-    /** channels_json → {항목: {세부 항목: 상한}} (입력 순서 유지). 이전 형식 행은 null → 빈 맵. */
+    /** channels_json → {항목: {세부 항목: 상한}} (입력 순서 유지). */
     static Map<String, Map<String, Integer>> channels(String json) {
-        if (json == null) return new LinkedHashMap<>();
         return JSON.readValue(json, CHANNELS);
     }
 
@@ -52,10 +51,8 @@ public class LicenseRepository {
                 rs.getObject("submission_token", UUID.class), LicenseRecord.Status.valueOf(rs.getString("status")),
                 rs.getString("project_name"), rs.getString("license_type"), rs.getString("site_id"),
                 ts(rs, "issued_at"), ts(rs, "not_before"), ts(rs, "not_after"), rs.getString("warning_notice"),
-                rs.getObject("license_ver", Integer.class), rs.getString("solution"),
-                rs.getObject("channels_total", Integer.class), channels(rs.getString("channels_json")),
-                rs.getObject("online_stt", Integer.class), rs.getObject("offline_stt", Integer.class),
-                rs.getObject("grace_period_days", Integer.class),
+                rs.getInt("license_ver"), rs.getString("solution"),
+                rs.getInt("channels_total"), channels(rs.getString("channels_json")),
                 rs.getString("license_text"), rs.getString("license_sha256"), rs.getString("public_key_fp"),
                 rs.getString("renewed_from"), rs.getLong("issued_by"), rs.getString("issued_by_name"),
                 rs.getString("error"), rs.getString("void_reason"), ts(rs, "voided_at"), ts(rs, "created_at"));

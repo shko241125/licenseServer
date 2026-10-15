@@ -100,7 +100,7 @@ class ContractValidatorTest {
         for (String type : ContractValidator.TYPES) {
             LicenseRecord rec = new LicenseRecord(1, "0".repeat(32), null, LicenseRecord.Status.ISSUED, c.projectName(),
                     type, c.siteId(), c.issuedAt(), c.notBefore(), c.notAfter(), c.warningNotice(), 1, c.solution(),
-                    c.total(), c.channels(), null, null, null, "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
+                    c.total(), c.channels(), "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
             assertThat(IssueForm.copyOf(rec, KST, java.time.LocalDate.of(2026, 10, 13)).getLicenseType()).isEqualTo(type);
         }
     }
@@ -253,7 +253,7 @@ class ContractValidatorTest {
         Contract c = ContractValidator.validate(f, KST, NOW).contract();
         LicenseRecord rec = new LicenseRecord(1, "0".repeat(32), null, LicenseRecord.Status.ISSUED, c.projectName(),
                 c.licenseType(), c.siteId(), c.issuedAt(), c.notBefore(), c.notAfter(), c.warningNotice(), 1, c.solution(),
-                c.total(), c.channels(), null, null, null, "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
+                c.total(), c.channels(), "text", "sha", "fp", null, 1, "admin", null, null, null, NOW);
         IssueForm copy = IssueForm.copyOf(rec, KST, java.time.LocalDate.of(2026, 10, 7));
         assertThat(copy.getChannels()).hasSize(IssueForm.MIN_ROWS);   // 6행 + 빈 행 → 최소 10
         assertThat(copy.getChannels().get(5).getGroup()).isEqualTo("streaming");
