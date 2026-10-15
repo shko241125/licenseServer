@@ -154,7 +154,7 @@ TEST(VerifySignature, StandardFieldsAndState) {
                             {"online", {{"sonastt", 8}, {"sonaasr", 2}}}}));
   EXPECT_EQ(f.not_after, T("9999-12-31T23:59:59Z"));
 
-  lic::VerifiedLicense tv = VerifyOk(Issue(Contract::Trial()));
+  lic::VerifiedLicense tv = VerifyOk(Issue(Contract::Dated()));
   ASSERT_EQ(lic::ParseStandardFields(tv, &f), Error::Ok);
   const std::int64_t na = T("2027-09-20T23:59:59Z");
   EXPECT_EQ(f.not_after, na);
@@ -174,7 +174,7 @@ Error Full(const std::string& text, int64_t now, lic::VerifiedLicense* v, lic::L
 }
 
 TEST(VerifyLicense, PeriodAndFieldsAreEnforced) {
-  const std::string text = Issue(Contract::Trial());  // 2026-09-21 ~ 2027-09-20T23:59:59Z, 유예 없음
+  const std::string text = Issue(Contract::Dated());  // 2026-09-21 ~ 2027-09-20T23:59:59Z, 유예 없음
   lic::VerifiedLicense v;
   lic::LicenseFields f;
   std::string detail;
@@ -198,12 +198,12 @@ TEST(VerifyLicense, PeriodAndFieldsAreEnforced) {
 // 하나의 진입점: 모드별 결과가 각각의 분리 함수와 정확히 같아야 한다.
 TEST(VerifyMode, SingleEntryMatchesSeparateFunctions) {
   auto pub = PublicOf(TestSeed());
-  Contract old = Contract::Trial("2020-12-31T23:59:59Z");
+  Contract old = Contract::Dated("2020-12-31T23:59:59Z");
   old.not_before = "2020-01-01T00:00:00Z";
   const std::string expired = Issue(old);
   const std::string nonstandard = SignRaw("{\"license_ver\":7,\"allowed_channels\":{\"total\":999999}}");
   // license_ver 가 없는 라이선스: 서명만 모드는 통과, 전체 모드는 InvalidField
-  const std::string no_ver = SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", ""));
+  const std::string no_ver = SignRaw(Replace(Contract::Dated().Json(), "\"license_ver\":1,", ""));
   const std::string valid = Issue(Contract{});
   const int64_t now = T("2027-01-01T00:00:00Z");
   for (const std::string* text : {&valid, &expired, &nonstandard, &no_ver}) {

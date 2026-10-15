@@ -79,12 +79,15 @@
 
 ### 발급 정책 (`licensectl issue`·발급 서버, 검증기는 보지 않음)
 
-| 유형 | `not_after` |
-|---|---|
-| `production` | 반드시 `9999-12-31T23:59:59Z`(영구) |
-| `trial`(시험·데모), `dev`(개발) | 실제 종료일. 기간 길이 제한 없음(다년 과제 가능). 영구 값은 거부(발급 서버는 9999년 이후 종료도 거부) |
-| 그 밖의 값 | 발급 거부 |
+| 유형 | `not_after` | 1회 발급 기간(`not_after − not_before`) |
+|---|---|---|
+| `production` | 반드시 `9999-12-31T23:59:59Z`(영구) | — |
+| `trial`(시험·데모) | 실제 종료일. 영구 값 거부 | **180일 이하** |
+| `dev`(개발) | 실제 종료일. 영구 값 거부 | **366일(1년) 이하**. 다년 과제는 발급 서버에 총 개발기한을 기록하고 그 안에서 1년 이내로 갱신 발급 |
+| 그 밖의 값 | 발급 거부 | |
 
+- 기간 상한은 발급 정책입니다. 검증기는 기간 길이를 보지 않으므로, SDK는 `not_before`~`not_after`만 판정하면 됩니다. 총 개발기한은 라이선스 파일에 들어가지 않습니다.
+- 발급 서버는 9999년 이후 종료도 시험·개발에서 거부합니다.
 - **엄격 발급:** 위 표(§2)에 없는 키가 있는 계약은 거부합니다(`<키>: unknown key`). 최상위는 `license_ver`·`license_id`·`project_name`·`license_type`·`solution`·`site_id`·`allowed_channels`·`validity`·`warning_notice`, `validity`는 `issued_at`·`not_before`·`not_after`만 받습니다. `allowed_channels`의 항목 이름은 자유입니다. 검증기는 모르는 키를 허용하므로(§5), 규격 밖 키(오타 등)를 그대로 서명하면 그 값이 적용되는 것처럼 보이는 라이선스가 나가기 때문입니다.
 - `license_ver`, `license_id`, `validity.issued_at`은 생략하면 자동으로 채웁니다.
 

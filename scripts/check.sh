@@ -59,7 +59,7 @@ P=9999-12-31T23:59:59Z   # 운영(production) = 영구
 mk valid production 3 3 3 2020-01-01T00:00:00Z $P
 mk more production 5 5 5 2020-01-01T00:00:00Z $P
 mk reduced production 5 1 - 2020-01-01T00:00:00Z $P     # 갱신으로 축소: sonastt 1, sonaasr 제외
-mk expired trial 3 3 3 2020-01-01T00:00:00Z 2020-12-31T23:59:59Z
+mk expired trial 3 3 3 2020-01-01T00:00:00Z 2020-03-31T23:59:59Z
 sed 's/"total": 3/"total": 30/' "$W/valid.lic" > "$W/tampered.lic"
 # 보조 평면 문자(이모지) + 한글이 든 라이선스: JNI 문자열 변환(변형 UTF-8 함정) 검증용
 python3 - "$W/valid.json" > "$W/emoji.json" <<'PY'

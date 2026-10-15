@@ -15,7 +15,7 @@ using lic::Error;
 using lic::Manager;
 using lic::State;
 
-// 기본 계약(Contract::Trial): total 16, offline sonastt 8 / sonaml 4 / sonaasr 4, online sonastt 8 / sonaasr 2,
+// 기본 계약(Contract::Dated, 개발): total 16, offline sonastt 8 / sonaml 4 / sonaasr 4, online sonastt 8 / sonaasr 2,
 // 2026-09-21 ~ 2027-09-20T23:59:59Z
 class ManagerTest : public ::testing::Test {
  protected:
@@ -34,7 +34,7 @@ class ManagerTest : public ::testing::Test {
 
   Error Open(std::unique_ptr<Manager>* m) { return Manager::OpenWith(path_, Cfg(), m); }
 
-  std::unique_ptr<Manager> MustOpen(const Contract& c = Contract::Trial()) {
+  std::unique_ptr<Manager> MustOpen(const Contract& c = Contract::Dated()) {
     ReplaceFile(path_, Issue(c));
     std::unique_ptr<Manager> m;
     EXPECT_EQ(Open(&m), Error::Ok);
@@ -57,27 +57,27 @@ TEST_F(ManagerTest, OpenFailures) {
   std::unique_ptr<Manager> m;
   EXPECT_EQ(Open(&m), Error::FileNotFound);
 
-  ReplaceFile(path_, Replace(Issue(Contract::Trial()), "\"sonastt\": 8", "\"sonastt\": 16"));
+  ReplaceFile(path_, Replace(Issue(Contract::Dated()), "\"sonastt\": 8", "\"sonastt\": 16"));
   EXPECT_EQ(Open(&m), Error::BadSignature);
 
   ReplaceFile(path_, "not json");
   EXPECT_EQ(Open(&m), Error::ParseError);
 
-  Contract future = Contract::Trial();
+  Contract future = Contract::Dated();
   future.not_before = "2027-01-01T00:00:00Z";
   ReplaceFile(path_, Issue(future));
   EXPECT_EQ(Open(&m), Error::NotYetValid);
 
-  Contract old = Contract::Trial("2025-12-31T23:59:59Z");
+  Contract old = Contract::Dated("2025-12-31T23:59:59Z");
   old.not_before = "2025-01-01T00:00:00Z";
   ReplaceFile(path_, Issue(old));
   EXPECT_EQ(Open(&m), Error::Expired);
   EXPECT_EQ(m, nullptr);
 
   // license_ver 없는 파일 / 지원하지 않는 license_ver
-  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "")));
+  ReplaceFile(path_, SignRaw(Replace(Contract::Dated().Json(), "\"license_ver\":1,", "")));
   EXPECT_EQ(Open(&m), Error::InvalidField);
-  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "\"license_ver\":2,")));
+  ReplaceFile(path_, SignRaw(Replace(Contract::Dated().Json(), "\"license_ver\":1,", "\"license_ver\":2,")));
   EXPECT_EQ(Open(&m), Error::UnsupportedVersion);
 
   // 일반 파일이 아닌 경로: 디렉터리, FIFO(쓰는 쪽이 없으면 예전 구현은 무기한 대기)
@@ -88,9 +88,9 @@ TEST_F(ManagerTest, OpenFailures) {
   EXPECT_EQ(Manager::OpenWith(fifo, Cfg(), &m), Error::FileNotFound);
 
   // 다른 키로 서명된 정상 형식 파일
-  ReplaceFile(path_, Issue(Contract::Trial(), TestSeed(50)));
+  ReplaceFile(path_, Issue(Contract::Dated(), TestSeed(50)));
   EXPECT_EQ(Open(&m), Error::BadSignature);
-  ReplaceFile(path_, Issue(Contract::Trial()));
+  ReplaceFile(path_, Issue(Contract::Dated()));
   EXPECT_EQ(Open(&m), Error::Ok);
   ASSERT_NE(m, nullptr);
 }
@@ -134,7 +134,7 @@ TEST_F(ManagerTest, EngineNotLicensed) {
   EXPECT_STREQ(lic::ErrorName(Error::EngineNotLicensed), "LICENSE_ENGINE_NOT_LICENSED");
   EXPECT_EQ(static_cast<int>(Error::EngineNotLicensed), 11);  // JNI 코드 1011
 
-  Contract zero = Contract::Trial();
+  Contract zero = Contract::Dated();
   zero.offline = {{"sonastt", 8}, {"sonaml", 0}};  // 상한 0 = 사용 안 함
   auto z = MustOpen(zero);
   EXPECT_EQ(z->Acquire("offline", "sonaml", &ch), Error::EngineNotLicensed);
@@ -259,7 +259,7 @@ TEST_F(ManagerTest, PermanentLicenseStaysValid) {
 
 TEST_F(ManagerTest, LazyReloadAfterInterval) {
   auto m = MustOpen();
-  Contract more = Contract::Trial();
+  Contract more = Contract::Dated();
   more.total = 30;
   more.offline = {{"sonastt", 20}};
   more.license_id = "11111111111111111111111111111111";
@@ -277,7 +277,7 @@ TEST_F(ManagerTest, LazyReloadAfterInterval) {
 
 TEST_F(ManagerTest, ExplicitReloadIsImmediate) {
   auto m = MustOpen();
-  Contract fewer = Contract::Trial();
+  Contract fewer = Contract::Dated();
   fewer.total = 3;
   fewer.offline = {{"sonastt", 3}};
   fewer.online = {};
@@ -289,7 +289,7 @@ TEST_F(ManagerTest, ExplicitReloadIsImmediate) {
 
 TEST_F(ManagerTest, BadReplacementKeepsCurrentLicense) {
   auto m = MustOpen();
-  const std::string good = Issue(Contract::Trial());
+  const std::string good = Issue(Contract::Dated());
 
   ReplaceFile(path_, Replace(good, "\"total\": 16", "\"total\": 800"));
   EXPECT_EQ(m->Reload(), Error::BadSignature);
@@ -307,14 +307,14 @@ TEST_F(ManagerTest, BadReplacementKeepsCurrentLicense) {
   EXPECT_EQ(m->MaxChannels("offline", "sonastt"), 8);
 
   // 만료된 라이선스로의 교체 거부
-  Contract old = Contract::Trial("2025-12-31T23:59:59Z");
+  Contract old = Contract::Dated("2025-12-31T23:59:59Z");
   old.not_before = "2025-01-01T00:00:00Z";
   ReplaceFile(path_, Issue(old));
   EXPECT_EQ(m->Reload(), Error::Expired);
   EXPECT_EQ(m->Snapshot().state, State::Valid);
 
   // license_ver 없는 파일로의 교체 거부
-  ReplaceFile(path_, SignRaw(Replace(Contract::Trial().Json(), "\"license_ver\":1,", "")));
+  ReplaceFile(path_, SignRaw(Replace(Contract::Dated().Json(), "\"license_ver\":1,", "")));
   EXPECT_EQ(m->Reload(), Error::InvalidField);
   EXPECT_EQ(m->TotalChannels(), 16);
 
@@ -325,9 +325,9 @@ TEST_F(ManagerTest, BadReplacementKeepsCurrentLicense) {
 }
 
 TEST_F(ManagerTest, EarlyRenewalAppliesWhenItBecomesValid) {
-  Contract cur = Contract::Trial("2026-12-31T23:59:59Z");
+  Contract cur = Contract::Dated("2026-12-31T23:59:59Z");
   auto m = MustOpen(cur);
-  Contract renewal = Contract::Trial("2027-12-31T23:59:59Z");
+  Contract renewal = Contract::Dated("2027-12-31T23:59:59Z");
   renewal.license_id = "22222222222222222222222222222222";
   renewal.not_before = "2027-01-01T00:00:00Z";
   ReplaceFile(path_, Issue(renewal));  // 미개시 갱신본을 미리 배치
@@ -348,7 +348,7 @@ TEST_F(ManagerTest, LimitReductionDoesNotEvict) {
   auto m = MustOpen();
   std::vector<Channel> held(6);
   for (auto& ch : held) ASSERT_EQ(m->Acquire("offline", "sonastt", &ch), Error::Ok);
-  Contract fewer = Contract::Trial();
+  Contract fewer = Contract::Dated();
   fewer.offline = {{"sonastt", 2}};
   ReplaceFile(path_, Issue(fewer));
   ASSERT_EQ(m->Reload(), Error::Ok);
@@ -362,7 +362,7 @@ TEST_F(ManagerTest, LimitReductionDoesNotEvict) {
 
   // 교체로 빠진 엔진도 사용 중이면 현황에 남는다(max 0)
   Channel ml;
-  Contract base = Contract::Trial();
+  Contract base = Contract::Dated();
   ReplaceFile(path_, Issue(base));
   ASSERT_EQ(m->Reload(), Error::Ok);
   ASSERT_EQ(m->Acquire("offline", "sonaml", &ml), Error::Ok);
@@ -392,7 +392,7 @@ TEST_F(ManagerTest, ReplacedByFifoDoesNotBlock) {
 
 TEST_F(ManagerTest, ClockRollbackTriggersRecheck) {
   auto m = MustOpen();
-  Contract more = Contract::Trial();
+  Contract more = Contract::Dated();
   more.offline = {{"sonastt", 9}};
   ReplaceFile(path_, Issue(more));
   now_ -= 3600;  // 시계를 과거로
@@ -409,7 +409,7 @@ TEST_F(ManagerTest, InfoJson) {
             "\"sonastt\":{\"max\":8,\"used\":0}},\"total\":{\"max\":16,\"used\":1}},"
             "\"checked_at\":\"2026-10-01T00:00:00Z\",\"issued_at\":\"2026-09-21T00:00:00Z\","
             "\"last_reload_error\":\"OK\",\"license_id\":\"0123456789abcdef0123456789abcdef\","
-            "\"license_type\":\"trial\",\"not_after\":\"2027-09-20T23:59:59Z\","
+            "\"license_type\":\"dev\",\"not_after\":\"2027-09-20T23:59:59Z\","
             "\"not_before\":\"2026-09-21T00:00:00Z\",\"project_name\":\"STT Platform "
             "Modernization\",\"site_id\":\"SEOUL-MAIN-DC\",\"solution\":\"sonastt-universal\","
             "\"state\":\"VALID\"}");
@@ -417,7 +417,7 @@ TEST_F(ManagerTest, InfoJson) {
 
 TEST_F(ManagerTest, ConcurrentAcquireNeverExceedsLimits) {
   // 엔진 상한 3·3, total 5: 두 엔진을 섞어 경쟁시켜도 엔진별 ≤ 3, 합 ≤ 5
-  Contract c = Contract::Trial();
+  Contract c = Contract::Dated();
   c.total = 5;
   c.offline = {{"sonastt", 3}, {"sonaml", 3}};
   c.online = {};
@@ -454,7 +454,7 @@ TEST_F(ManagerTest, ConcurrentAcquireNeverExceedsLimits) {
 
 TEST_F(ManagerTest, ConcurrentReloadAndAcquire) {
   auto m = MustOpen();
-  Contract a = Contract::Trial(), b = Contract::Trial();
+  Contract a = Contract::Dated(), b = Contract::Dated();
   b.total = 4;
   b.offline = {{"sonastt", 4}};
   b.online = {{"sonaasr", 1}};

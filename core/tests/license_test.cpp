@@ -298,7 +298,7 @@ TEST(License, SchemaValidationAfterSignature) {
 
 TEST(License, StateBoundaries) {
   lic::LicenseData d;
-  ASSERT_EQ(Verify(Issue(Contract::Trial()), &d), Error::Ok);
+  ASSERT_EQ(Verify(Issue(Contract::Dated()), &d), Error::Ok);
   const int64_t nb = T("2026-09-21T00:00:00Z"), na = T("2027-09-20T23:59:59Z");
   EXPECT_EQ(d.StateAt(nb - 1), State::NotYetValid);
   EXPECT_EQ(d.StateAt(nb), State::Valid);
@@ -345,37 +345,56 @@ TEST(License, SignContractDefaultsAndChecks) {
   EXPECT_EQ(sign(Replace(Contract{}.Json(), "\"license_ver\":1", "\"license_ver\":1,\"signature\":\"x\"")),
             Error::InvalidField);
   EXPECT_EQ(sign("{"), Error::ParseError);
-  Contract inverted = Contract::Trial("2026-01-01T00:00:00Z");
+  Contract inverted = Contract::Dated("2026-01-01T00:00:00Z");
   EXPECT_EQ(sign(inverted.Json()), Error::InvalidField);
 
   // 발급 유형은 production / trial / dev 만
-  Contract dev = Contract::Trial();
-  dev.license_type = "dev";
-  EXPECT_EQ(sign(dev.Json()), Error::Ok) << detail;
+  EXPECT_EQ(sign(Contract::Dated().Json()), Error::Ok) << detail;   // dev, 2026-09-21 ~ 2027-09-20T23:59:59Z
   EXPECT_EQ(sign(bad_type.Json()), Error::InvalidField);
   EXPECT_NE(detail.find("production, trial, dev"), std::string::npos) << detail;
   for (const char* t : {"Production", "demo", "development", "trial "}) {   // 별칭·대소문자·공백은 받지 않음
-    Contract c = Contract::Trial();
+    Contract c = Contract::Dated();
     c.license_type = t;
     EXPECT_EQ(sign(c.Json()), Error::InvalidField) << t;
   }
 
   // 발급 정책: 운영은 영구, 시험·개발은 실제 종료일
-  EXPECT_EQ(sign(Contract::Trial().Json()), Error::Ok) << detail;
+  EXPECT_EQ(sign(Contract::Dated().Json()), Error::Ok) << detail;
   Contract prod_dated;
   prod_dated.not_after = "2027-09-20T23:59:59Z";
   EXPECT_EQ(sign(prod_dated.Json()), Error::InvalidField);
   EXPECT_NE(detail.find("permanent"), std::string::npos) << detail;
-  Contract trial_perm = Contract::Trial("9999-12-31T23:59:59Z");
+  Contract dev_perm = Contract::Dated("9999-12-31T23:59:59Z");
+  Contract trial_perm = dev_perm;
+  trial_perm.license_type = "trial";
   EXPECT_EQ(sign(trial_perm.Json()), Error::InvalidField);
-  Contract dev_perm = trial_perm;
-  dev_perm.license_type = "dev";
+  EXPECT_NE(detail.find("trial/dev"), std::string::npos) << detail;
   EXPECT_EQ(sign(dev_perm.Json()), Error::InvalidField);
   EXPECT_NE(detail.find("trial/dev"), std::string::npos) << detail;
 
+  // 1회 발급 기간 상한(not_after - not_before): 시험 180일, 개발 366일. 경계값은 허용, 1초 넘으면 거부
+  Contract trial = Contract::Dated("2027-03-20T00:00:00Z");   // 2026-09-21 + 180일
+  trial.license_type = "trial";
+  EXPECT_EQ(sign(trial.Json()), Error::Ok) << detail;
+  trial.not_after = "2027-03-20T00:00:01Z";
+  EXPECT_EQ(sign(trial.Json()), Error::InvalidField);
+  EXPECT_EQ(detail, "validity: trial licenses must not exceed 180 days (not_after - not_before)");
+  Contract dev = Contract::Dated("2027-09-22T00:00:00Z");     // 2026-09-21 + 366일
+  EXPECT_EQ(sign(dev.Json()), Error::Ok) << detail;
+  dev.not_after = "2027-09-22T00:00:01Z";
+  EXPECT_EQ(sign(dev.Json()), Error::InvalidField);
+  EXPECT_EQ(detail, "validity: dev licenses must not exceed 366 days (not_after - not_before)");
+  Contract dev_leap = Contract::Dated("2029-02-27T23:59:59Z");  // 윤일(2028-02-29)을 걸친 1년 = 366일 - 1초도 허용
+  dev_leap.not_before = "2028-02-28T00:00:00Z";
+  EXPECT_EQ(sign(dev_leap.Json()), Error::Ok) << detail;
+  // 검증기는 기간 길이를 보지 않는다(발급 정책): 상한을 넘는 기간도 서명이 맞으면 통과
+  lic::LicenseData long_trial;
+  trial.not_after = "2028-09-20T23:59:59Z";
+  EXPECT_EQ(Verify(SignRaw(trial.Json()), &long_trial), Error::Ok);
+
   // 검증기는 유형 값을 제한하지 않는다(표시용): 발급 목록 밖의 값도 서명이 맞으면 통과
   for (const char* t : {"dev", "enterprise"}) {
-    Contract c = Contract::Trial();
+    Contract c = Contract::Dated();
     c.license_type = t;
     lic::LicenseData verified;
     EXPECT_EQ(Verify(SignRaw(c.Json()), &verified), Error::Ok) << t;

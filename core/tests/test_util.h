@@ -52,10 +52,10 @@ struct Contract {
       "This software license is geographically restricted to the designated site. "
       "Unauthorized replication or exceeding allowed channels is strictly prohibited.";
 
-  // 시험 라이선스(실제 종료일). 기간 경계 테스트용.
-  static Contract Trial(const std::string& not_after = "2027-09-20T23:59:59Z") {
+  // 기간이 있는 라이선스(개발, 1년 이내 실제 종료일). 기간 경계 테스트용.
+  static Contract Dated(const std::string& not_after = "2027-09-20T23:59:59Z") {
     Contract c;
-    c.license_type = "trial";
+    c.license_type = "dev";
     c.not_after = not_after;
     return c;
   }

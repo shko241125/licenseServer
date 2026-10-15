@@ -503,6 +503,14 @@ Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kS
     if (detail) *detail = "validity.not_after: trial/dev licenses must have a real end date";
     return Error::InvalidField;
   }
+  // 1회 발급 기간 상한: 짧게 발급하고 갱신하게 해서 장기 라이선스가 운영 대용으로 쓰이는 것을 막는다.
+  const int64_t max_len = data.license_type == "trial" ? kTrialMaxSeconds
+                          : data.license_type == "dev" ? kDevMaxSeconds : 0;
+  if (max_len > 0 && data.not_after - data.not_before > max_len) {
+    if (detail) *detail = "validity: " + data.license_type + " licenses must not exceed " +
+                          std::to_string(max_len / 86400) + " days (not_after - not_before)";
+    return Error::InvalidField;
+  }
 
   uint8_t sig[crypto::kSignatureSize];
   uint8_t pub[crypto::kPublicKeySize];

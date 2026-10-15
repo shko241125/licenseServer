@@ -13,7 +13,7 @@ cmake -S . -B build -G Ninja && cmake --build build --target licensectl
 ./build/licensectl verify -pub build/dev-keys/public.key -json - < build/dev.lic   # JSON 출력
 ```
 - 계약 JSON(`contract.example.json`)에서 기간·채널을 바꿔 시험용 라이선스를 만듭니다. `license_ver`, `license_id`, `validity.issued_at`은 생략하면 자동으로 채워집니다.
-  - 발급 정책: `production`은 `not_after`가 `9999-12-31T23:59:59Z`(영구)여야 하고, 만료를 시험하려면 `license_type`을 `trial`로 바꿔 실제 종료일을 줍니다(04-license-format.md §2).
+  - 발급 정책: `production`은 `not_after`가 `9999-12-31T23:59:59Z`(영구)여야 하고, 만료를 시험하려면 `license_type`을 `trial`로 바꿔 실제 종료일을 줍니다. 1회 발급 기간은 `trial` 180일·`dev` 366일 이하입니다(04-license-format.md §2).
 - 개발 키로 빌드한 SDK는 **운영 라이선스를 거부하고, 개발 라이선스를 받아들입니다.** 이 빌드를 배포하지 않습니다(01-build.md §6).
 - 개발 키와 라이선스는 `build/` 아래에 둡니다(git 무시). 저장소 루트의 `private.key`, `/keys/`, `/*.lic`도 무시되지만, 그것에 기대지 않습니다.
 

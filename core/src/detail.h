@@ -21,6 +21,10 @@ constexpr size_t kMaxGroups = 64;       // allowed_channels 의 항목 수 상�
 constexpr size_t kMaxEngines = 64;      // 항목 하나의 세부 항목 수 상한
 // 운영(production) 라이선스의 영구 표기. 발급 정책에만 쓰고, 검증기는 일반 시각으로 다룬다.
 constexpr const char* kPermanentNotAfter = "9999-12-31T23:59:59Z";
+// 1회 발급 기간 상한(not_after - not_before, 발급 정책 전용). 시험 180일, 개발 1년(윤년 포함 366일).
+// 개발 과제의 총 기한(2~5년 등)은 발급 서버가 기록하고, 그 안에서 1년 단위로 갱신 발급한다.
+constexpr int64_t kTrialMaxSeconds = 180LL * 86400;
+constexpr int64_t kDevMaxSeconds = 366LL * 86400;
 
 // 서명 검증을 통과한 뒤에만 채워지는 라이선스 내용.
 struct LicenseData {
@@ -46,7 +50,7 @@ Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKe
 // 발급기 전용: 계약 JSON(서명 없음)에 기본값을 채우고 검증·서명한 뒤 사람이 읽는 license.lic 텍스트를 만든다.
 //   license_ver 없음 → 1, license_id 없음 → 난수 32 hex, validity.issued_at 없음 → now
 // 발급 정책: license_type 은 production/trial/dev, production 의 not_after 는 영구 표기(kPermanentNotAfter),
-//            trial/dev 는 영구 표기 금지. 규격에 없는 키는 거부(엄격 발급 — 검증기는 모르는 키를 허용한다).
+//            trial/dev 는 영구 표기 금지, 기간 상한 trial 180일·dev 366일. 규격에 없는 키는 거부(엄격 발급 — 검증기는 모르는 키를 허용한다).
 // 발급 직후 같은 키의 공개키로 ParseAndVerify 자기검증까지 통과해야 성공.
 Error SignContract(std::string_view contract_json, const uint8_t seed[crypto::kSeedSize],
                    int64_t now, std::string* license_text, LicenseData* out, std::string* detail);
