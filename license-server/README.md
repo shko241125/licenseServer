@@ -23,22 +23,16 @@
 | 라이선스 기록 | 상태 전이는 트리거로 강제합니다(PENDING→ISSUED/FAILED, ISSUED→VOID(사유 필수)). 계약 필드는 바꿀 수 없고, DELETE 권한도 없습니다 |
 | 컨테이너 | uid 10001, 읽기 전용 루트, `cap_drop: ALL`, `no-new-privileges`, 스왑 없음. DB는 외부 통신이 없고, web은 외부로 나가는 NAT가 꺼져 있습니다 |
 
-## 2. 빌드
+## 2. 빌드와 배포 패키지
 
-인터넷이 되는 빌드 머신에서 **저장소 루트**를 빌드 컨텍스트로 씁니다.
+실물 서버에는 **배포 패키지**(`license-server-<버전>.tar.gz`: 이미지 2개 + 배포 구성 + 문서)로 설치합니다. 만드는 방법·받는 쪽 설치와 업그레이드 순서·파일 목록은 [../docs/release/license-server.md](../docs/release/license-server.md)에 있습니다.
 
 ```bash
-docker build -f license-server/Dockerfile -t license-server:1.0.0 .
+scripts/make-server-release.sh --ref server-v<버전> --verify   # 저장소 루트에서. 인터넷이 되는 리눅스 빌드 머신
 ```
-
-- 빌드 중에 C++ 코어 단위 테스트와 서버 단위 테스트가 실행됩니다. 하나라도 실패하면 이미지가 만들어지지 않습니다.
-- 인터넷이 없는 내부망으로 옮길 때:
-  ```bash
-  docker save license-server:1.0.0 postgres:16-alpine | gzip > license-server-1.0.0.tar.gz
-  sha256sum license-server-1.0.0.tar.gz > license-server-1.0.0.tar.gz.sha256   # 함께 반입해 대조
-  # 내부망 호스트에서
-  sha256sum -c license-server-1.0.0.tar.gz.sha256 && gunzip -c license-server-1.0.0.tar.gz | docker load
-  ```
+- 태그 커밋의 소스로 이미지를 빌드합니다. 빌드 중에 C++ 코어 단위 테스트와 서버 단위 테스트가 실행되고, 하나라도 실패하면 이미지가 만들어지지 않습니다.
+- `--verify`는 풀어낸 패키지만으로 새 스택을 설치·기동해 확인하고 지웁니다.
+- 이미지만 직접 빌드할 때: `docker build -f license-server/Dockerfile -t license-server:<버전> .`(저장소 루트가 빌드 컨텍스트)
 
 개발 중 테스트:
 ```bash
@@ -57,7 +51,9 @@ cmake -S .. -B ../build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTT_LICENS
   - 이때 `backup.sh`·`verify-anchors.sh`도 `COMPOSE_PROJECT_NAME=<이름> ./backup.sh`처럼 같은 이름으로 실행합니다. 스크립트는 `-p` 없이 `docker compose`를 부르므로, 붙이지 않으면 compose 파일의 기본 이름(`license-server`) 스택을 대상으로 합니다(그 스택이 떠 있으면 **다른 DB를 백업**합니다).
 
 ```bash
-cp -r license-server/deploy /opt/license-server && cd /opt/license-server
+# 배포 패키지를 풀고 이미지를 docker load 한 뒤(../docs/release/license-server.md §3)
+sudo install -d -o "$USER" -m 755 /opt/license-server
+cp -r license-server/deploy/. /opt/license-server/ && cd /opt/license-server
 ./init-secrets.sh license.example.internal     # DB 비밀번호, 데이터 키, 초기 관리자 비밀번호, 임시 TLS 인증서
 ```
 - `secrets/`(0700)에 파일이 생깁니다. 파일 자체는 컨테이너 사용자가 읽을 수 있도록 0444입니다.
@@ -66,11 +62,12 @@ cp -r license-server/deploy /opt/license-server && cd /opt/license-server
 ### 키 생성식 (최초 1회)
 네트워크 없는 컨테이너에서 **운영자 uid로** 실행해야, 생성된 파일을 운영자가 다룰 수 있습니다.
 ```bash
+TAG=<버전>        # 패키지 VERSION 첫 줄(예: 1.7.0)
 mkdir -m 700 ceremony && U="$(id -u):$(id -g)"
 docker run --rm --network none --user $U --entrypoint /opt/licensectl -v $PWD/ceremony:/work \
-  license-server:1.0.0 keygen -out /work/keys
+  license-server:$TAG keygen -out /work/keys
 docker run --rm -it --network none --user $U --entrypoint java -v $PWD/ceremony:/work \
-  license-server:1.0.0 -jar /app/license-server.jar seal-key \
+  license-server:$TAG -jar /app/license-server.jar seal-key \
   --in /work/keys/private.key --out /work/sealed-key.json --licensectl /opt/licensectl
 #  → 패스프레이즈(20자 이상)를 두 번 입력. 출력된 fingerprint 를 기록
 install -m 444 ceremony/sealed-key.json data/key/sealed-key.json
@@ -78,7 +75,7 @@ cp ceremony/keys/public.key ./public.key           # SDK 빌드 담당자에게 
 shred -u ceremony/keys/private.key                  # 평문 비밀키 삭제
 echo "LICENSE_PUBLIC_KEY_FP=<fingerprint>" > .env   # 봉인 파일 바꿔치기 방지용 지문 고정
 echo "LICENSE_BIND_IP=<관리망 IP>" >> .env
-echo "LICENSE_SERVER_TAG=1.0.0" >> .env
+echo "LICENSE_SERVER_TAG=$TAG" >> .env
 ```
 - 패스프레이즈는 두 명이 나눠 봉인 보관합니다. `sealed-key.json`은 오프라인 매체에 2부 백업합니다.
 - 패스프레이즈를 잃어버리면 새 키를 만들고 SDK를 다시 배포해야 합니다.
@@ -111,6 +108,7 @@ docker compose ps        # web: healthy
 | 감사 무결성 | 화면 "해시 체인 무결성 검사"(주 1회) + `./verify-anchors.sh [외부 보관 앵커]`(월 1회). 방법론: `docs/audit-hash-chain.md`(이 디렉터리 기준) |
 | 복원 | `docker compose stop web` → `docker compose exec -T db pg_restore -U postgres -d license --clean < backups/license-<시각>.dump` → `docker compose start web` 후 감사 로그 화면에서 "해시 체인 무결성 검사". 결과의 마지막 해시가 `audit-anchor.log`와 같은지 확인. **분기마다 훈련** |
 | 계정 | 계정 관리 화면에서 추가·비활성화·비밀번호 초기화·OTP 초기화. 비활성화하면 그 사용자의 세션이 즉시 끝납니다 |
+| 업그레이드 | 백업 → 새 패키지 대조·`docker load` → 배포 구성 덮어쓰기(`secrets/`·`data/`·`.env`는 그대로) → `.env`의 `LICENSE_SERVER_TAG` 변경 → `docker compose up -d --wait`(DB 마이그레이션 자동 적용). 마이그레이션이 적용된 뒤 되돌리려면 **백업 복원 + 이전 버전**(이전 이미지만으로는 안 됨). 자세히: `../docs/release/license-server.md` §3 |
 | 재시작 | 재시작하면 키가 봉인 상태로 돌아갑니다. 관리자가 다시 해제해야 합니다 |
 | 헬스 | 컨테이너 안 `127.0.0.1:8081/actuator/health`(Docker HEALTHCHECK). 외부 포트에는 노출되지 않습니다 |
 

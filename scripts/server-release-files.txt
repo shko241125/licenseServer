@@ -1,0 +1,14 @@
+# 발급 서버 패키지에 담을 문서·배포 구성 (scripts/make-server-release.sh 가 읽음). 경로 또는 디렉터리, '#' 주석.
+# 이미지(images/)·README·VERSION·SHA256SUMS 는 스크립트가 만든다. 여기 없는 것은 들어가지 않는다.
+# 설명: docs/release/license-server.md
+
+# 배포 구성 (비밀값·봉인 키·DB 는 git 무시 대상이라 담기지 않는다)
+license-server/deploy
+
+# 설치·운영 문서
+license-server/README.md
+license-server/docs
+docs/release/license-server.md
+
+# 서버 문서가 가리키는 SDK 문서(라이선스 규격, 공개키 전달, 현장 조치). 서로 링크하므로 묶음 전체
+docs/sdk
