@@ -1,6 +1,6 @@
 # 작업 상태 (STATUS)
 
-- **갱신:** 2026-10-16
+- **갱신:** 2026-10-19
 - **기준:** 이 파일을 갱신한 커밋의 트리(`git log -1 -- docs/dev/STATUS.md`). 이후 커밋이 더 있으면 그 변경을 먼저 확인합니다.
 - 결정과 이유는 [DECISIONS.md](DECISIONS.md), 작업 규칙은 [../../CLAUDE.md](../../CLAUDE.md)를 봅니다.
 
@@ -12,7 +12,7 @@
 | `licensectl` | 완료 | keygen / issue / verify / sign / pubkey. 2.0.0: 새 형식 요약·`-json`·발급 대장, 발급 정책(운영 영구) 강제, `VALID`일 때만 종료 코드 0 |
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증. 2.0.0: 엔진별 세션 풀(`sonastt`·`sonaasr`), 엔진 상한·`total`·`1011` 시험 |
 | SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~06(07 업그레이드 안내는 D42로 삭제), `scripts/make-sdk-release.sh`(허용 목록). 정식 발행: 태그 `sdk-v2.0.0`(2026-10-12), `sdk-v2.0.1`(2026-10-13), **`sdk-v2.0.2`(2026-10-15)** |
-| 발급 서버 v1.7 | 완료 | 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정. v1.3: `license_ver` 1 발급(D37, D38) — 마이그레이션 V3(이전 기록 보존·"이전 형식" 표시), (항목, 세부 항목, 상한) 행 입력, 운영 영구, 문자열 길이 UTF-8 바이트 기준으로 수정. v1.4: 유형 `production`·`trial`·`dev`(D40, DB V4 CHECK), 시험·개발 기간 길이 제한·1년 경고 없음. v1.5: 검증 화면 입력 예시 버그 수정(`format_version` → `license_ver`). v1.6: 이전 형식 지원 제거(D42, DB V5 — 옛 열 삭제·새 열 NOT NULL), `license_ver` 1 단일 형식(`11f47d6`). v1.7: 1회 발급 상한(시험 180일·개발 1년), 개발 총 개발기한(D43, DB V6 `dev_until`), 만료 목록에서 갱신 완료 원본 제외·총 기한 마지막 발급 붉은 알림, 갱신 폼 기간 자동 계산(`7cd4551`) |
+| 발급 서버 1.7.0 | 완료 | **설치 패키지 발행**(D44): `scripts/make-server-release.sh`, 태그 `server-v1.7.0`, 문서 `docs/release/license-server.md`. 발행 기록은 §2. 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정. v1.3: `license_ver` 1 발급(D37, D38) — 마이그레이션 V3(이전 기록 보존·"이전 형식" 표시), (항목, 세부 항목, 상한) 행 입력, 운영 영구, 문자열 길이 UTF-8 바이트 기준으로 수정. v1.4: 유형 `production`·`trial`·`dev`(D40, DB V4 CHECK), 시험·개발 기간 길이 제한·1년 경고 없음. v1.5: 검증 화면 입력 예시 버그 수정(`format_version` → `license_ver`). v1.6: 이전 형식 지원 제거(D42, DB V5 — 옛 열 삭제·새 열 NOT NULL), `license_ver` 1 단일 형식(`11f47d6`). v1.7: 1회 발급 상한(시험 180일·개발 1년), 개발 총 개발기한(D43, DB V6 `dev_until`), 만료 목록에서 갱신 완료 원본 제외·총 기한 마지막 발급 붉은 알림, 갱신 폼 기간 자동 계산(`7cd4551`) |
 | 원격 작업 기반 | 완료(클라우드 실측 전) | `CLAUDE.md`, 이 파일, `DECISIONS.md`, `scripts/cloud-setup.sh` |
 | SDK·STT 서버 실제 적용 | **미착수(다른 저장소)** | 계획: `docs/sdk/02-integration.md`, `03-stt-server.md`, 수용 기준 `05-testing.md` §3 |
 
