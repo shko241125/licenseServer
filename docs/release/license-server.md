@@ -117,7 +117,7 @@ cp -r license-server/deploy/. /opt/license-server/ && cd /opt/license-server
 
 | 버전 | 태그 → 커밋 | 패키지 SHA-256 | 비고 |
 |---|---|---|---|
-| 1.7.0 | `server-v1.7.0` | (STATUS.md 발행 기록) | 첫 정식 발행. DB 마이그레이션 V1~V6, 라이선스 형식 `license_ver` 1, 개발 총 개발기한·1회 발급 상한(D43) |
+| 1.7.0 | `server-v1.7.0` → `6b9fc33` | `783f6be627e8d0fb92fb0fd304951a70a0f461069c6736fe5fb179e5ff8b67b4` | 첫 정식 발행. DB 마이그레이션 V1~V6, 라이선스 형식 `license_ver` 1, 개발 총 개발기한·1회 발급 상한(D43) |
 
 ## 6. 발행 수용 기준
 
