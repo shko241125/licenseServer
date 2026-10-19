@@ -82,6 +82,7 @@ grep -aqE -- "$KEY_RE|$PEM_RE" "$TMP/licensectl" && fail "private key material i
 rm -f "$TMP/app.jar" "$TMP/licensectl"
 docker save -o "$STAGE/images/$NAME.tar" "$IMAGE"
 docker save -o "$STAGE/images/${PG_IMAGE//:/-}.tar" "$PG_IMAGE"
+chmod 644 "$STAGE"/images/*.tar   # docker save -o 는 0600 — root 로 풀면 docker 그룹 사용자가 load 하지 못한다
 
 # ---- 루트 안내와 버전 정보 ----
 cat > "$STAGE/README.md" <<EOF
