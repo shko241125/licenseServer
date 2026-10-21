@@ -1,6 +1,6 @@
 # 작업 상태 (STATUS)
 
-- **갱신:** 2026-10-19
+- **갱신:** 2026-10-21
 - **기준:** 이 파일을 갱신한 커밋의 트리(`git log -1 -- docs/dev/STATUS.md`). 이후 커밋이 더 있으면 그 변경을 먼저 확인합니다.
 - 결정과 이유는 [DECISIONS.md](DECISIONS.md), 작업 규칙은 [../../CLAUDE.md](../../CLAUDE.md)를 봅니다.
 
@@ -13,6 +13,7 @@
 | JNI 참조 구현·하네스 | 완료 | `connect(callback, configFile, hostLicense)` 형태, 모드 선택, 기존 `.key` 형태 보존 검증. 2.0.0: 엔진별 세션 풀(`sonastt`·`sonaasr`), 엔진 상한·`total`·`1011` 시험 |
 | SDK 적용 문서·발행 | 완료 | `docs/sdk/` 01~06(07 업그레이드 안내는 D42로 삭제), `scripts/make-sdk-release.sh`(허용 목록). 정식 발행: 태그 `sdk-v2.0.0`(2026-10-12), `sdk-v2.0.1`(2026-10-13), **`sdk-v2.0.2`(2026-10-15)** |
 | 발급 서버 1.7.0 | 완료 | **설치 패키지 발행**(D44): `scripts/make-server-release.sh`, 태그 `server-v1.7.0`, 문서 `docs/release/license-server.md`. 발행 기록은 §2. 로그인·TOTP·봉인 키·발급·감사 해시 체인·임시 비밀번호 만료. Docker 배포. v1.2: 화면 전면 정리(사이드바 앱 셸, 디자인 토큰, 한국어 상태 배지, 폼 묶음·칸별 오류, 위험 작업 구분), 새 발급 폼 오류 시 "갱신 발급" 오표시 수정. v1.3: `license_ver` 1 발급(D37, D38) — 마이그레이션 V3(이전 기록 보존·"이전 형식" 표시), (항목, 세부 항목, 상한) 행 입력, 운영 영구, 문자열 길이 UTF-8 바이트 기준으로 수정. v1.4: 유형 `production`·`trial`·`dev`(D40, DB V4 CHECK), 시험·개발 기간 길이 제한·1년 경고 없음. v1.5: 검증 화면 입력 예시 버그 수정(`format_version` → `license_ver`). v1.6: 이전 형식 지원 제거(D42, DB V5 — 옛 열 삭제·새 열 NOT NULL), `license_ver` 1 단일 형식(`11f47d6`). v1.7: 1회 발급 상한(시험 180일·개발 1년), 개발 총 개발기한(D43, DB V6 `dev_until`), 만료 목록에서 갱신 완료 원본 제외·총 기한 마지막 발급 붉은 알림, 갱신 폼 기간 자동 계산(`7cd4551`) |
+| 발급 서버 1.7.0 podman 판 | 완료 | Rocky/RHEL 8(podman 4.9.4, rootful, CNI)용 설치 패키지(D45): `make-server-release.sh --podman`, 구성 `deploy/podman-stack.sh`(pod, NAT 끔), 시험 `scripts/verify-podman-package.sh`, 문서 `docs/release/license-server-podman.md`. 같은 버전·같은 이미지(docker 1.7.0 패키지의 이미지 파일 그대로). 태그 `server-v1.7.0-podman`. **실물 서버 확인 필요**: SELinux Enforcing, cgroup v1, 재부팅 자동 시작, firewalld |
 | 원격 작업 기반 | 완료(클라우드 실측 전) | `CLAUDE.md`, 이 파일, `DECISIONS.md`, `scripts/cloud-setup.sh` |
 | SDK·STT 서버 실제 적용 | **미착수(다른 저장소)** | 계획: `docs/sdk/02-integration.md`, `03-stt-server.md`, 수용 기준 `05-testing.md` §3 |
 
@@ -91,6 +92,7 @@
 - 기존 `.key` **실물**과의 대조. 고객 데이터라 저장소에 없고, 저장소 테스트는 합성 데이터를 씁니다
 - 사용자 로컬 개발 배포 스택(브라우저 E2E, 봉인·해제 운영 절차, 백업·복원 훈련)
 - 운영 키 생성식, 운영 공개키 반영
+- 발급 서버 podman 판의 실물 Rocky 8.10 확인: SELinux Enforcing에서 bind mount 라벨, cgroup v1 메모리 제한, 재부팅 후 `podman-restart.service` 자동 시작과 health 타이머, firewalld. 설치 서버에서 `sudo scripts/verify-podman-package.sh <패키지>`(패키지에 포함)로 앞의 셋을 먼저 확인합니다(`docs/release/license-server-podman.md` §6)
 
 ## 6. 클라우드 시범 운행 지시문 (V5)
 
