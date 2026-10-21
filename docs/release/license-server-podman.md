@@ -174,4 +174,5 @@ docker 판 패키지 목록([license-server.md](license-server.md) §4)과 같�
 
 | 버전 | 태그 → 커밋 | 이미지 출처 | 패키지 SHA-256 |
 |---|---|---|---|
+| 1.8.0 | `server-v1.8.0` → `2a11774`(docker 판과 같은 태그. podman 구성이 이미 그 커밋에 있어 별도 태그 없음) | `license-server-1.8.0.tar.gz`(`d5cd1d73…a7e0`)의 이미지 그대로 | `6c9bdf5e98a6ad45efcf53323e7b36087fe28973d55050b2b3fac37404c5c5fb` |
 | 1.7.0 | `server-v1.7.0-podman` → `69eb452` | `license-server-1.7.0.tar.gz`(`783f6be6…b67b4`)의 이미지 그대로, 원 커밋 `6b9fc33` | `969061628ef42f377066d39e499f1bc5e046f6a88594ee89b55e7f6dfe32167e` |

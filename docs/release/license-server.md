@@ -120,6 +120,7 @@ cp -r license-server/deploy/. /opt/license-server/ && cd /opt/license-server
 
 | 버전 | 태그 → 커밋 | 패키지 SHA-256 | 비고 |
 |---|---|---|---|
+| 1.8.0 | `server-v1.8.0` → `2a11774` | `d5cd1d73b0a9ee934dc2820b0d223f44d9faf44060fa8032d25e92b8bac7a7e0` | 2026-10-21. 이미지 안 `licensectl`이 코어 3.0.0(`verify`에 `check_mode`), 검증 화면에 `check_mode`. **DB 마이그레이션 추가 없음**(V1~V6 그대로) → 1.7.0으로 되돌릴 때 DB 복원 불필요. 서버 이미지 `sha256:c1da3820…` |
 | 1.7.0 | `server-v1.7.0` → `6b9fc33` | `783f6be627e8d0fb92fb0fd304951a70a0f461069c6736fe5fb179e5ff8b67b4` | 첫 정식 발행. DB 마이그레이션 V1~V6, 라이선스 형식 `license_ver` 1, 개발 총 개발기한·1회 발급 상한(D43) |
 
 ## 6. 발행 수용 기준
