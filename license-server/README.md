@@ -122,5 +122,7 @@ docker compose ps        # web: healthy
 | 해제 "재인증에 실패" | 비밀번호나 OTP가 틀림, 또는 **같은 30초 구간의 OTP 재사용**(다음 코드를 기다려 입력) |
 | 해제 `LOCKED` | 패스프레이즈 5회 오류 → 15분 뒤 재시도 |
 | 로그인 "임시 비밀번호가 만료되었습니다" | 관리자가 계정 관리에서 비밀번호를 다시 초기화(새 임시 비밀번호, 새 만료 시각) |
+| `admin` 비밀번호를 잊음 | 다른 `ADMIN` 계정이 계정 관리에서 비밀번호 초기화. `secrets/initial_admin_password`는 **사용자가 0명일 때 최초 1회만** 쓰이므로, 파일을 고치거나 재시작해도 적용되지 않습니다. 다른 관리자가 없으면 아래 "처음 상태로 초기화"뿐입니다 |
+| 처음 상태로 초기화(시험 설치 정리 등) | `docker compose down -v` → `docker compose up -d`. DB 볼륨(`pgdata`)이 지워져 **계정·발급 기록·감사 로그가 모두 사라집니다**(먼저 `./backup.sh`). `secrets/`·봉인 키·`.env`는 남으므로 `admin` + `secrets/initial_admin_password`로 다시 로그인하고 OTP를 새로 등록합니다 |
 | 브라우저 인증서 경고 | 자체 서명 인증서 → `secrets/tls.crt`를 관리자 PC에 신뢰 등록하거나 사내 CA 인증서 사용 |
 | `seal-key`가 파일을 못 씀 / 운영자가 봉인 파일을 못 읽음 | 키 생성식 컨테이너를 `--user $(id -u):$(id -g)`로 실행 |
