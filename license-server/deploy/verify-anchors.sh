@@ -6,12 +6,18 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 ANCHORS="${1:-./backups/audit-anchor.log}"
+# podman 배포(podman-stack.sh)는 .env 에 LICENSE_RUNTIME=podman 을 둔다. 없으면 docker compose.
+if grep -qx 'LICENSE_RUNTIME=podman' .env 2>/dev/null; then
+  dbx() { podman exec -i "${LICENSE_STACK:-license-server}-db" "$@"; }
+else
+  dbx() { docker compose exec -T db "$@"; }
+fi
 [ -r "$ANCHORS" ] || { echo "anchor file not found: $ANCHORS" >&2; exit 2; }
 fail=0
 while read -r ts seq hash _dump; do
   [[ "$seq" =~ ^[0-9]+$ ]] || continue   # 'empty' 등 앵커가 없던 백업은 건너뜀
   # < /dev/null: exec 가 반복문의 stdin(앵커 파일)을 읽어 버리지 않게 한다
-  cur=$(docker compose exec -T db psql -U postgres -d license -At \
+  cur=$(dbx psql -U postgres -d license -At \
         -c "SELECT hash FROM audit_event WHERE seq = $seq" < /dev/null)
   if [ "$cur" = "$hash" ]; then
     echo "OK    seq $seq  ($ts)"

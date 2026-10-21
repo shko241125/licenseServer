@@ -6,11 +6,17 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 OUT="${1:-./backups}"
+# podman 배포(podman-stack.sh)는 .env 에 LICENSE_RUNTIME=podman 을 둔다. 없으면 docker compose.
+if grep -qx 'LICENSE_RUNTIME=podman' .env 2>/dev/null; then
+  dbx() { podman exec -i "${LICENSE_STACK:-license-server}-db" "$@"; }
+else
+  dbx() { docker compose exec -T db "$@"; }
+fi
 umask 077
 mkdir -p "$OUT"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
-docker compose exec -T db pg_dump -U postgres --format=custom license > "$OUT/license-$TS.dump"
-ANCHOR=$(docker compose exec -T db psql -U postgres -d license -At -c \
+dbx pg_dump -U postgres --format=custom license > "$OUT/license-$TS.dump"
+ANCHOR=$(dbx psql -U postgres -d license -At -c \
   "SELECT seq || ' ' || hash FROM audit_event ORDER BY seq DESC LIMIT 1")
 echo "$TS ${ANCHOR:-empty} $(sha256sum "$OUT/license-$TS.dump" | cut -d' ' -f1)" >> "$OUT/audit-anchor.log"
 echo "backup: $OUT/license-$TS.dump"

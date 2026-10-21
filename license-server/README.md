@@ -26,6 +26,7 @@
 ## 2. 빌드와 배포 패키지
 
 실물 서버에는 **배포 패키지**(`license-server-<버전>.tar.gz`: 이미지 2개 + 배포 구성 + 문서)로 설치합니다. 만드는 방법·받는 쪽 설치와 업그레이드 순서·파일 목록은 [../docs/release/license-server.md](../docs/release/license-server.md)에 있습니다.
+- Docker가 없는 Rocky/RHEL 8(podman 4.9)에는 **podman 판**(`license-server-<버전>-podman.tar.gz`, 같은 버전·같은 이미지)을 씁니다. 구성 도구는 `deploy/podman-stack.sh`이고, 이 문서의 docker 명령은 [../docs/release/license-server-podman.md](../docs/release/license-server-podman.md) §4 대응표로 바꿔 씁니다.
 
 ```bash
 scripts/make-server-release.sh --ref server-v<버전> --verify   # 저장소 루트에서. 인터넷이 되는 리눅스 빌드 머신

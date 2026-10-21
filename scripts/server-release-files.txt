@@ -9,6 +9,10 @@ license-server/deploy
 license-server/README.md
 license-server/docs
 docs/release/license-server.md
+docs/release/license-server-podman.md
+
+# podman 판 설치 서버에서 시험 설치·기동(docker 판에도 함께 담김)
+scripts/verify-podman-package.sh
 
 # 서버 문서가 가리키는 SDK 문서(라이선스 규격, 공개키 전달, 현장 조치). 서로 링크하므로 묶음 전체
 docs/sdk

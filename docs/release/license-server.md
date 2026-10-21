@@ -15,6 +15,7 @@
 | 버전 원본 | `license-server/build.gradle.kts`의 `version = "x.y.z"` |
 | 태그 | `server-v<버전>` (주석 태그) |
 | 생성 도구 | `scripts/make-server-release.sh`, 담을 목록 `scripts/server-release-files.txt` |
+| podman 판 | Rocky/RHEL 8(podman 4.9)용 `license-server-<버전>-podman.tar.gz`. 같은 버전, 이 패키지의 이미지 파일을 그대로 담음 → [license-server-podman.md](license-server-podman.md) |
 
 버전 규칙:
 - x: 설치·업그레이드에 수동 조치가 필요한 변경(비밀값 형식, compose 구조, 키 봉인 형식).
@@ -94,12 +95,14 @@ cp -r license-server/deploy/. /opt/license-server/ && cd /opt/license-server
 | `images/postgres-16-alpine.tar` *(생성)* | DB 이미지(`docker save`). 다이제스트는 `VERSION`에 기록 |
 | `license-server/deploy/docker-compose.yml` | web·db 구성(읽기 전용 루트, 내부 DB 네트워크, 비밀값 파일) |
 | `license-server/deploy/init-secrets.sh` | 비밀값·임시 TLS 인증서 생성(최초 1회) |
-| `license-server/deploy/backup.sh`, `verify-anchors.sh` | 일일 백업·감사 앵커 대조 |
+| `license-server/deploy/backup.sh`, `verify-anchors.sh` | 일일 백업·감사 앵커 대조(`.env`의 `LICENSE_RUNTIME=podman`이면 podman) |
+| `license-server/deploy/podman-stack.sh` | podman 판 구성 도구(compose 대신) |
 | `license-server/deploy/db-init/01-roles.sh` | DB 최초 초기화 때 계정 분리 |
 | `license-server/README.md` | 보안 구조, 설치, 운영, 문제 해결 |
 | `license-server/docs/audit-hash-chain.md` | 감사 로그 해시 체인 방법론 |
 | `license-server/docs/licensectl-operations.md` | 발급 서버 없이 `licensectl`로 발급할 때의 절차 |
 | `docs/release/license-server.md` | 이 문서 |
+| `docs/release/license-server-podman.md`, `scripts/verify-podman-package.sh` | podman 판 설치 문서·설치 시험(두 판에 함께 담김) |
 | `docs/sdk/` | 서버 문서가 가리키는 SDK 문서 묶음(공개키 전달 01, 라이선스 규격 04, 현장 조치 06 등. 서로 링크하므로 전체) |
 
 정확한 목록은 패키지의 `SHA256SUMS`가 원본입니다.

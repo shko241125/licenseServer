@@ -29,8 +29,8 @@
 | `integration/` | JNI 참조 구현 + Java 결합 테스트(`harness/`), SDK 형태 CMake 소비자(`cmake-consumer/`) |
 | `license-server/` | Spring Boot 4.1 / Java 21 / Gradle 발급 서버, PostgreSQL, Docker 배포 |
 | `docs/sdk/` | SDK 적용 문서(발행 대상), `docs/dev/` 작업 상태·결정 |
-| `docs/release/` | 배포 정리: SDK(`sdk.md`), 발급 서버(`license-server.md`) |
-| `scripts/` | `check.sh`(전체 검증), `make-sdk-release.sh`(SDK 패키지), `make-server-release.sh`(발급 서버 설치 패키지), `cloud-setup.sh`(도구 준비) |
+| `docs/release/` | 배포 정리: SDK(`sdk.md`), 발급 서버(`license-server.md`, podman 판 `license-server-podman.md`) |
+| `scripts/` | `check.sh`(전체 검증), `make-sdk-release.sh`(SDK 패키지), `make-server-release.sh`(발급 서버 설치 패키지, `--podman` podman 판), `verify-podman-package.sh`(podman 판 설치 시험), `cloud-setup.sh`(도구 준비) |
 
 ## 3. 검증 명령
 ```bash
@@ -44,6 +44,8 @@ cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTT_LICENSE_BU
 (cd license-server && ./gradlew integrationTest)  # 통합 테스트 (Docker/Testcontainers 필요)
 scripts/make-sdk-release.sh --worktree --verify   # SDK 패키지를 풀어 단독 검증 (발행 전)
 scripts/make-server-release.sh --worktree --verify   # 발급 서버 패키지를 풀어 설치·기동 검증 (발행 전, Docker)
+scripts/make-server-release.sh --worktree --podman build/server-release/license-server-<버전>.tar.gz --verify
+                                                  # podman 판: Rocky 8.10 + podman 4.9 컨테이너 안에서 설치·기동 검증
 ```
 - 변경한 부분에 해당하는 검증은 반드시 실행하고, 결과(통과 수·실패 출력)를 사실대로 보고합니다.
 - WSL의 `/mnt/c` 아래에서는 권한 검사 일부를 건너뜁니다. 리눅스 파일시스템에서 돌리는 것이 정확합니다.
