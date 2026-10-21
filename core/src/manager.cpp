@@ -218,6 +218,7 @@ Info Manager::Snapshot() {
   i.not_after = l.not_after;
   i.checked_at = now;
   i.state = l.StateAt(now);
+  i.check_mode = l.check_mode;
   i.last_reload_error = s->last_reload_error;
   return i;
 }
@@ -244,11 +245,14 @@ std::string InfoToJson(const Info& i) {
   root.Set("solution", MakeString(i.solution));
   root.Set("site_id", MakeString(i.site_id));
   root.Set("channels", std::move(ch));
-  root.Set("issued_at", MakeString(FormatUtcTime(i.issued_at)));
+  // minimal 판정에서 issued_at 을 읽지 못하면 0 이다. 1970-01-01 로 보이지 않게 빈 문자열로 둔다.
+  const bool no_issued_at = i.check_mode == CheckMode::Minimal && i.issued_at == 0;
+  root.Set("issued_at", MakeString(no_issued_at ? "" : FormatUtcTime(i.issued_at)));
   root.Set("not_before", MakeString(FormatUtcTime(i.not_before)));
   root.Set("not_after", MakeString(FormatUtcTime(i.not_after)));
   root.Set("checked_at", MakeString(FormatUtcTime(i.checked_at)));
   root.Set("state", MakeString(StateName(i.state)));
+  root.Set("check_mode", MakeString(CheckModeName(i.check_mode)));
   root.Set("last_reload_error", MakeString(ErrorName(i.last_reload_error)));
   return json::Canonicalize(root);
 }
@@ -286,8 +290,8 @@ const char* ErrorMessage(Error e) {
     case Error::InvalidField:
       return "License contents are invalid. Contact the vendor for a reissued license.";
     case Error::UnsupportedVersion:
-      return "License version (license_ver) is not supported by this engine. "
-             "Request a license in the supported format.";
+      return "License format (license_ver or check_mode) is not supported by this engine. "
+             "Request a license in a format this engine supports.";
     case Error::NotYetValid:
       return "License is not valid yet (before not_before). Check the host clock.";
     case Error::Expired:
@@ -298,6 +302,10 @@ const char* ErrorMessage(Error e) {
       return "This channel item is not licensed (not in allowed_channels or limit 0). Check the license.";
   }
   return "Unknown license error.";
+}
+
+const char* CheckModeName(CheckMode m) {
+  return m == CheckMode::Minimal ? "minimal" : "full";
 }
 
 const char* StateName(State s) {

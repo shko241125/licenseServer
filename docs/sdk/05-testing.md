@@ -66,6 +66,9 @@ WSL에서는 리눅스 파일시스템(예: `~/work`)에 두고 실행합니다.
 | `license_id` 없는 새 형식(외부 도구 서명) | 1005 |
 | 기존 `sonaLicense.*.key` | 공존 설정 on: 기존 경로 성공 / off: 1003 |
 | 설정에 옛 키 `--license-verify-mode=signature` + 만료 라이선스 | 1008 (설정이 검사를 낮추지 못함) |
+| `check_mode: "minimal"` + `license_ver: 2`(안정 필드만 있음, 발급 담당이 시험용 키로 만든 파일) | 0, 로그 `check_mode=minimal`, 세션 수는 라이선스 상한, 표시 필드 빈 값으로도 오류 없음 |
+| `check_mode: "minimal"` + `license_ver: 1` + 필수 필드 누락 | 1005 (아는 형식이면 전체 규칙) |
+| `check_mode: "Minimal"`(대문자) | 1006 |
 
 **공격 저항**
 - [ ] `LD_PRELOAD`로 `EVP_DigestVerify`를 항상 성공시키는 라이브러리를 주입해도 변조 파일이 `1004` (방법: `scripts/check.sh` 6단계의 `fake_verify.c`)

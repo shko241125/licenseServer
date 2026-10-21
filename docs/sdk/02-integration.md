@@ -28,10 +28,12 @@ createSonaSTT(cb, configFile, hostLicense) ──▶  connect(cb, configFile, ho
 | `license.GetString/GetInt/GetBool(path, &out)`, `Has(path)` | 판정을 통과한 라이선스에서 값 조회. 경로는 점으로 구분(`"allowed_channels.offline.sonastt"`). 없거나 타입이 다르면 `false`. 표준 필드는 `fields`로 받고, 이것은 그 밖의 값(추가형 새 필드 등)용 | — |
 | `license.canonical_json()` | 서명 대상 바이트(정규 JSON) | — |
 | `StateAt(fields, now)` | `NotYetValid` / `Valid` / `Expired`(유예 기간 없음). 운영 중 기간 재판정용 | — |
+| `CheckModeName(fields.check_mode)` | 적용한 판정 수준 `"full"` / `"minimal"`(04-license-format.md §5). 로그용 | — |
+| `LibraryVersion()` / `MaxLicenseVer()` | 이 라이브러리 버전(예 `"3.0.0"`)과 전체 규칙으로 판정하는 가장 높은 `license_ver`(예 `1`). `connect` 로그에 남겨, 현장 SDK가 어떤 형식까지 아는지 확인하는 근거로 씀 | — |
 | `Utf16ToUtf8(ptr, len, &out)` | UTF-16 → 표준 UTF-8. 짝 없는 서로게이트면 `false` | — |
 | `ErrorName(e)` / `ErrorMessage(e)` | `"LICENSE_BAD_SIGNATURE"` / 현장 조치 문구(영문) | — |
 
-`LicenseFields`: `license_ver`, `license_id`, `project_name`, `license_type`, `solution`, `site_id`, `warning_notice`, `total_channels`, `channels`(`std::map<std::string, std::map<std::string, int>>`, 항목 → 세부 항목 → 상한. 항목 이름은 자유, 예: `offline`·`online`), `issued_at`, `not_before`, `not_after`(UTC epoch 초).
+`LicenseFields`: `check_mode`(적용한 수준. `Minimal`이면 안정 필드만 판정했고 나머지는 비어 있을 수 있음), `license_ver`, `license_id`, `project_name`, `license_type`, `solution`, `site_id`, `warning_notice`, `total_channels`, `channels`(`std::map<std::string, std::map<std::string, int>>`, 항목 → 세부 항목 → 상한. 항목 이름은 자유, 예: `offline`·`online`), `issued_at`, `not_before`, `not_after`(UTC epoch 초).
 
 ## 3. `jstring` → UTF-8: `GetStringUTFChars`를 쓰면 안 된다
 
@@ -74,9 +76,11 @@ JNIEXPORT jint JNICALL Java_<패키지>_<클래스>_connect(JNIEnv* env, jobject
     if (e == lic::Error::Ok) e = lic::VerifyLicense(text, &license, &fields, &detail);
     if (e != lic::Error::Ok) {
       // (기존 .key 공존을 켰다면 e == ParseError 일 때만 기존 경로로 — §6)
-      // 로그: lic::ErrorName(e), detail
+      // 로그: lic::ErrorName(e), detail, lic::LibraryVersion(), lic::MaxLicenseVer()
       return 1000 + static_cast<int>(e);                             // 연결 거부
     }
+    // 로그: lic::CheckModeName(fields.check_mode), lic::LibraryVersion(), lic::MaxLicenseVer()
+    //   ("minimal" 이면 이 SDK 가 라이선스 형식을 모름 = SDK 업그레이드 대상. 연결은 정상)
     // ---- 여기부터 SDK 초기화 (§7): 세션 풀 크기 = min(설정값, fields 의 세부 항목 상한) ----
     // ... 기존 connect 처리 계속 (모델 백엔드, 세션 풀 생성 등)
     return 0;
@@ -101,6 +105,7 @@ JNIEXPORT jint JNICALL Java_<패키지>_<클래스>_connect(JNIEnv* env, jobject
 - 이전 판(2.x)의 설정 `--license-verify-mode`와 `signature` 모드(서명만 확인)는 3.0.0에서 삭제했습니다. 설정 파일에 그 키가 남아 있어도 판정에 영향이 없습니다(하네스 시험).
 - 새 형식 라이선스에는 SDK의 별도 만료 장치를 쓰지 않습니다. 그 장치는 기존 `.key` 경로(§6)에만 남깁니다.
 - 기간은 `connect` 때 판정합니다. 운영 중 재판정은 §8의 미결 사항입니다(`StateAt(fields, now)`로 다시 볼 수 있음).
+- 형식을 올린 라이선스라도 `check_mode: "minimal"`이면 안정 필드와 기간만 판정해 받습니다(04-license-format.md §5). SDK가 할 일은 같습니다. 결과가 `Ok`면 연결하고, `fields.check_mode`를 로그에 남깁니다. 표시용 필드(`project_name` 등)는 비어 있을 수 있습니다.
 
 ## 6. 기존 라이선스(`sonaLicense.*.key`)와 공존
 
@@ -139,6 +144,7 @@ const int sonastt_sessions = std::min(cfg_num_sessions, cap("offline", "sonastt"
 - 값은 **서명된 내용에서만** 나오고, `VerifyLicense`가 범위까지 판정한 뒤에만 채워집니다.
 - 항목 이름은 라이선스마다 정할 수 있으므로, SDK가 어떤 항목·세부 항목 이름을 읽을지 미리 정해 둡니다.
 - 표준 필드 밖의 값이 필요하면 `license.GetInt(path, &n)` 등으로 읽습니다(판정을 통과한 라이선스에서만).
+- **동작 판단에는 안정 필드만 씁니다**(`fields.total_channels`, `fields.channels`, `fields.not_before`·`not_after`, `fields.license_id`). `license_type`·`license_ver` 같은 다른 필드로 동작을 나누지 않습니다(`minimal` 파일에서는 비어 있을 수 있음).
 
 ## 8. 미결 사항 — 라이선스 갱신 (추후 결정)
 

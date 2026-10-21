@@ -97,6 +97,8 @@ class IssueFlowIT extends IntegrationTestBase {
                 "site_id", "allowed_channels", "validity", "warning_notice", "signature");
         assertThat(new java.util.ArrayList<Object>(((java.util.Map<?, ?>) issued.get("validity")).keySet()))
                 .containsExactly("issued_at", "not_before", "not_after");
+        // 발급 불변식(D47 I1): issued_at 은 항상 있고 DB 의 발급 시각과 같다. check_mode 키는 넣지 않는다(I3, 위 키 목록)
+        assertThat(((java.util.Map<?, ?>) issued.get("validity")).get("issued_at")).isEqualTo(Contract.utc(r.issuedAt()));
 
         // 같은 제출 토큰 재전송 → 새로 발급하지 않고 같은 건 반환
         assertThat(issue.issue(f, admin(), "127.0.0.1").licenseId()).isEqualTo(r.licenseId());

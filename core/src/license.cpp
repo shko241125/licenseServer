@@ -1,5 +1,6 @@
 #include <chrono>
 #include <cstdio>
+#include <limits>
 
 #include "detail.h"
 #include "json.h"
@@ -58,6 +59,17 @@ bool Digits(std::string_view s, size_t pos, size_t n, int* out) {
   return true;
 }
 
+// 문자열 필드 규칙(1바이트 이상 max_len 이하, 제어문자 없음). 판정(Extractor::Text)과 minimal 표시 필드 읽기가 함께 쓴다.
+enum class TextIssue { Ok, NotString, Length, Control };
+TextIssue CheckText(const Value* v, size_t max_len) {
+  if (!v || v->type != Value::Type::String) return TextIssue::NotString;
+  if (v->str.empty() || v->str.size() > max_len) return TextIssue::Length;
+  for (unsigned char c : v->str) {
+    if (c < 0x20 || c == 0x7F) return TextIssue::Control;
+  }
+  return TextIssue::Ok;
+}
+
 // 필드 추출 도우미. 실패 시 detail에 필드 경로를 남긴다.
 class Extractor {
  public:
@@ -71,10 +83,11 @@ class Extractor {
 
   bool Text(const Value& parent, const char* key, size_t max_len, std::string* out) {
     const Value* v = parent.Find(key);
-    if (!v || v->type != Value::Type::String) return Fail(key, "must be a string");
-    if (v->str.empty() || v->str.size() > max_len) return Fail(key, "length out of range");
-    for (unsigned char c : v->str) {
-      if (c < 0x20 || c == 0x7F) return Fail(key, "must not contain control characters");
+    switch (CheckText(v, max_len)) {
+      case TextIssue::NotString: return Fail(key, "must be a string");
+      case TextIssue::Length: return Fail(key, "length out of range");
+      case TextIssue::Control: return Fail(key, "must not contain control characters");
+      case TextIssue::Ok: break;
     }
     *out = v->str;
     return true;
@@ -127,11 +140,82 @@ class Extractor {
   std::string* detail_;
 };
 
+// 안정 필드 규칙 중 값 사이의 관계(full·minimal 공통). 실패하면 detail 에 사유를 남긴다.
+bool AnyPositive(const LicenseData& d, Extractor* x) {
+  for (const auto& [group, items] : d.groups) {
+    for (const auto& [name, n] : items) {
+      if (n > 0) return true;
+    }
+  }
+  return x->Fail("allowed_channels", "at least one item must allow 1 or more channels");
+}
+
+bool PeriodOrdered(const LicenseData& d, Extractor* x) {
+  if (d.not_before < d.not_after) return true;
+  return x->Fail("validity", "not_before must be earlier than not_after");
+}
+
+// minimal 의 표시용 필드: 규칙(v1 과 같음)에 맞을 때만 채우고, 아니면 빈 값. detail 을 건드리지 않는다.
+void LooseText(const Value& parent, const char* key, size_t max_len, std::string* out) {
+  const Value* v = parent.Find(key);
+  if (CheckText(v, max_len) == TextIssue::Ok) *out = v->str;
+}
+
+}  // namespace
+
+Error ExtractMinimal(const Value& root, LicenseData* out, std::string* detail) {
+  Extractor x(detail);
+  LicenseData d;
+  d.check_mode = CheckMode::Minimal;
+  // 안정 필드: license_id → allowed_channels → validity 형식과 순서 (실패하면 그 단계에서 멈춤)
+  const Value* ch = nullptr;
+  const Value* va = nullptr;
+  bool ok = x.Text(root, "license_id", 128, &d.license_id) &&
+            (ch = x.Object(root, "allowed_channels")) != nullptr &&
+            x.Int(*ch, "total", 1, kMaxChannels, &d.total) &&
+            x.Groups(*ch, d.total, &d.groups) && AnyPositive(d, &x) &&
+            (va = x.Object(root, "validity")) != nullptr &&
+            x.Time(*va, "not_before", &d.not_before) &&
+            x.Time(*va, "not_after", &d.not_after) && PeriodOrdered(d, &x);
+  if (!ok) return Error::InvalidField;
+  // 표시용 필드(판정하지 않음)
+  LooseText(root, "project_name", 256, &d.project_name);
+  LooseText(root, "license_type", 64, &d.license_type);
+  LooseText(root, "solution", 128, &d.solution);
+  LooseText(root, "site_id", 256, &d.site_id);
+  LooseText(root, "warning_notice", 4096, &d.warning_notice);
+  if (const Value* lv = root.Find("license_ver");
+      lv && lv->type == Value::Type::Int && lv->num >= 1 && lv->num <= std::numeric_limits<int>::max()) {
+    d.license_ver = static_cast<int>(lv->num);
+  }
+  if (const Value* ia = va->Find("issued_at"); ia && ia->type == Value::Type::String) {
+    int64_t t = 0;
+    if (ParseUtcTime(ia->str, &t)) d.issued_at = t;
+  }
+  *out = std::move(d);
+  return Error::Ok;
+}
+
+namespace {
+
 Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
   Extractor x(detail);
   LicenseData d;
-  // license_ver 를 먼저 본다: 다른 형식이면 다른 필드 오류보다 "미지원 버전"이 정확한 사유다.
   const Value* lv = root.Find("license_ver");
+  // check_mode: 이 판을 모르는 검증기에게 주는 지시. 아는 판(kLicenseVer)이면 값과 관계없이 그 판의 전체 규칙이다.
+  if (const Value* cm = root.Find("check_mode")) {
+    if (cm->type != Value::Type::String) {
+      x.Fail("check_mode", "must be a string");
+      return Error::InvalidField;
+    }
+    if (cm->str != "full" && cm->str != "minimal") {
+      if (detail) *detail = "check_mode: not supported (expected \"full\" or \"minimal\")";
+      return Error::UnsupportedVersion;
+    }
+    const bool known_ver = lv && lv->type == Value::Type::Int && lv->num == kLicenseVer;
+    if (cm->str == "minimal" && !known_ver) return ExtractMinimal(root, out, detail);
+  }
+  // license_ver 를 먼저 본다: 다른 형식이면 다른 필드 오류보다 "미지원 버전"이 정확한 사유다.
   if (!lv || lv->type != Value::Type::Int) {
     x.Fail("license_ver", "must be an integer");
     return Error::InvalidField;
@@ -157,19 +241,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
             x.Time(*va, "issued_at", &d.issued_at) &&
             x.Time(*va, "not_before", &d.not_before) &&
             x.Time(*va, "not_after", &d.not_after);
-  if (!ok) return Error::InvalidField;
-  bool any_positive = false;
-  for (const auto& [group, items] : d.groups) {
-    for (const auto& [name, n] : items) any_positive = any_positive || n > 0;
-  }
-  if (!any_positive) {
-    x.Fail("allowed_channels", "at least one item must allow 1 or more channels");
-    return Error::InvalidField;
-  }
-  if (d.not_before >= d.not_after) {
-    x.Fail("validity", "not_before must be earlier than not_after");
-    return Error::InvalidField;
-  }
+  if (!ok || !AnyPositive(d, &x) || !PeriodOrdered(d, &x)) return Error::InvalidField;
   *out = std::move(d);
   return Error::Ok;
 }
@@ -334,6 +406,7 @@ Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, st
   LicenseData l;
   if (Error e = ExtractFields(d->root, &l, detail); e != Error::Ok) return e;
   LicenseFields f;
+  f.check_mode = l.check_mode;
   f.license_ver = l.license_ver;
   f.license_id = l.license_id;
   f.project_name = l.project_name;
@@ -349,6 +422,10 @@ Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, st
   *out = std::move(f);
   return Error::Ok;
 }
+
+const char* LibraryVersion() { return kLibraryVersion; }
+
+int MaxLicenseVer() { return kLicenseVer; }
 
 State StateAt(const LicenseFields& f, std::int64_t now) {
   LicenseData l;

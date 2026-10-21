@@ -15,7 +15,9 @@
 namespace stt::license {
 
 constexpr size_t kMaxFileSize = 64 * 1024;
-constexpr int kLicenseVer = 1;          // license_ver (형식 버전)
+constexpr int kLicenseVer = 1;          // license_ver (형식 버전). 이 코어가 전체 규칙으로 판정하는 가장 높은 값
+// 라이브러리 버전. CMakeLists.txt 의 project(VERSION)과 같아야 한다(구성 단계에서 확인).
+constexpr const char* kLibraryVersion = "3.0.0";
 constexpr int kMaxChannels = 100000;
 constexpr size_t kMaxGroups = 64;       // allowed_channels 의 항목 수 상한 (total 제외)
 constexpr size_t kMaxEngines = 64;      // 항목 하나의 세부 항목 수 상한
@@ -28,6 +30,7 @@ constexpr int64_t kDevMaxSeconds = 366LL * 86400;
 
 // 서명 검증을 통과한 뒤에만 채워지는 라이선스 내용.
 struct LicenseData {
+  CheckMode check_mode = CheckMode::Full;  // 적용한 판정 수준(공개 헤더 CheckMode 참고)
   int license_ver = 0;
   std::string license_id, project_name, license_type, solution, site_id, warning_notice;
   int total = 0;  // 전체 동시 세션 상한(모든 항목·세부 항목 합)
@@ -42,6 +45,11 @@ struct LicenseData {
     return it == g->second.end() ? 0 : it->second;
   }
 };
+
+// 고정된 최소 판정(check_mode "minimal" + 모르는 license_ver). 안정 필드와 형식만 보고, 표시용 필드는 형식이 맞을 때만
+// 채운다. 3.0.0 이후 규칙을 바꾸지 않는다(이미 나간 SDK 의 판정과 같아야 함). 형식 판 2 이상을 발급할 때 자기 검증이
+// 이 함수를 직접 부른다(그 판을 아는 코어에서는 ExtractFields 가 그 판의 전체 규칙으로 가기 때문). 기간은 보지 않는다.
+Error ExtractMinimal(const json::Value& root, LicenseData* out, std::string* detail);
 
 // 파일 바이트 → 서명 검증 → 스키마 검증. detail에는 사람이 읽을 사유가 들어간다.
 Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKeySize],

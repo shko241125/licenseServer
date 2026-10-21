@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 project(stt_license VERSION 3.0.0 LANGUAGES CXX)
 
+# 코드의 라이브러리 버전(LibraryVersion())이 위 VERSION 과 같은지 구성 단계에서 확인한다(버전을 한쪽만 고치는 실수 방지).
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/core/src/detail.h" _stt_ver_line REGEX "kLibraryVersion = ")
+if(NOT _stt_ver_line MATCHES "\"${stt_license_VERSION}\"")
+  message(FATAL_ERROR "core/src/detail.h kLibraryVersion does not match project VERSION ${stt_license_VERSION}: ${_stt_ver_line}")
+endif()
+
 # 단독 빌드인지, SDK 등에 add_subdirectory/FetchContent 로 포함됐는지 (PROJECT_IS_TOP_LEVEL 은 3.21+ 라 직접 비교)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
   set(_stt_top_level ON)
@@ -146,6 +152,7 @@ if(STT_LICENSE_BUILD_TESTS)
     set(_stt_gtest GTest::Main)  # CMake < 3.20 의 FindGTest
   endif()
   add_executable(stt_license_tests
+    core/tests/check_mode_test.cpp
     core/tests/json_test.cpp
     core/tests/license_test.cpp
     core/tests/manager_test.cpp

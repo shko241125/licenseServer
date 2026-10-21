@@ -244,6 +244,9 @@ JNIEXPORT jstring JNICALL Java_licenseharness_SttHarness_hostLicenseInfo(JNIEnv*
            ",\"site_id\":" + Quote(site) + ",\"not_after\":" + Quote(not_after) +
            ",\"project_name\":" + Quote(project) + ",\"fields_total\":" + std::to_string(f.total_channels) +
            ",\"fields_license_id\":" + Quote(f.license_id) +
+           ",\"check_mode\":" + Quote(lic::CheckModeName(f.check_mode)) +           // ★ 적용한 판정 수준(로그에 남김)
+           ",\"library_version\":" + Quote(lic::LibraryVersion()) +                 // ★ 현장 SDK 가 아는 형식의 근거
+           ",\"max_license_ver\":" + std::to_string(lic::MaxLicenseVer()) +
            ",\"canonical_bytes\":" + std::to_string(v.canonical_json().size()) + "}";
   }, ErrorJson(kErrInternal, "INTERNAL", "internal error"));
   // 반환 문자열에 비 ASCII(한글 등)가 있을 수 있어 NewStringUTF(변형 UTF-8 입력) 대신 UTF-16 으로 만든다.

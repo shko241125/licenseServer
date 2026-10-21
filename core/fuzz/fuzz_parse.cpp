@@ -52,7 +52,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       const lic::Error e = lic::ParseAndVerify(text, pub, &ld, &err);
       if (e == lic::Error::BadSignature) std::abort();          // 방금 서명했으므로 서명은 항상 맞아야 한다
       if (e == lic::Error::Ok) {                                // 통과했다면 규칙을 모두 만족해야 한다
-        if (ld.license_ver != 1 || ld.total < 1 || ld.total > 100000 || ld.not_before >= ld.not_after) std::abort();
+        // 적용 수준: Full 은 아는 판(1)만, Minimal 은 check_mode "minimal" + 모르는 판일 때만 (D47)
+        const lic::json::Value* cm = v.Find("check_mode");
+        const lic::json::Value* lv = v.Find("license_ver");
+        const bool known = lv && lv->type == lic::json::Value::Type::Int && lv->num == 1;
+        if (ld.check_mode == lic::CheckMode::Full && ld.license_ver != 1) std::abort();
+        if (ld.check_mode == lic::CheckMode::Minimal &&
+            (known || !cm || cm->type != lic::json::Value::Type::String || cm->str != "minimal" || ld.license_ver < 0)) {
+          std::abort();
+        }
+        if (ld.license_id.empty() || ld.total < 1 || ld.total > 100000 || ld.not_before >= ld.not_after) std::abort();
         bool positive = false;
         if (ld.groups.size() > 64 || ld.groups.count("total")) std::abort();
         for (const auto& [group, items] : ld.groups) {

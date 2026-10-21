@@ -107,6 +107,16 @@ cmp -s "$W/fixed-issue.lic" "$W/fixed-sign.lic" || { echo "sign output differs f
 [ "$("$L" pubkey < "$W/keys/private.key")" = "$(cat "$W/keys/public.key")" ] || { echo "pubkey mismatch"; exit 1; }
 out=$("$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - < "$W/fixed-sign.lic" || true)
 grep -q '"result":"OK"' <<<"$out" || { echo "verify -json failed: $out"; exit 1; }
+grep -q '"check_mode":"full"' <<<"$out" || { echo "verify -json check_mode: $out"; exit 1; }   # 적용 수준(D47)
+# 발급 도구는 check_mode 를 넣지 않는다(엄격 발급, D47 I3)
+python3 - "$W/valid.json" > "$W/check-mode.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1])); c["check_mode"] = "minimal"
+print(json.dumps(c, ensure_ascii=False))
+PY
+out=$("$L" issue -key "$W/keys/private.key" -in "$W/check-mode.json" -out "$W/check-mode.lic" 2>&1 || true)
+grep -q "check_mode: unknown key" <<<"$out" || { echo "check_mode contract accepted: $out"; exit 1; }
+[ ! -e "$W/check-mode.lic" ] || { echo "check_mode contract wrote a license"; exit 1; }
 out=$(sed 's/"total": 3/"total": 30/' "$W/fixed-sign.lic" | "$L" verify -pubkey "$(cat "$W/keys/public.key")" -json - || true)
 grep -q '"result":"LICENSE_BAD_SIGNATURE"' <<<"$out" || { echo "tampered verify -json: $out"; exit 1; }
 # allowed_channels 항목은 이름 자유(total 제외): 사용자 정의 항목 발급·검증, 항목 값이 객체가 아니면 거부

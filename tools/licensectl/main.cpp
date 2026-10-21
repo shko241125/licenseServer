@@ -247,6 +247,7 @@ json::Value GroupsObject(const std::map<std::string, std::map<std::string, int>>
 }
 
 void PrintSummary(const lic::LicenseData& d, int64_t at) {
+  std::printf("check_mode     : %s\n", lic::CheckModeName(d.check_mode));
   std::printf("license_ver    : %d\n", d.license_ver);
   std::printf("license_id     : %s\n", d.license_id.c_str());
   std::printf("project_name   : %s\n", d.project_name.c_str());
@@ -350,7 +351,10 @@ int Verify(const std::map<std::string, std::string>& flags, const std::vector<st
       o.Set("solution", json::MakeString(d.solution));
       o.Set("total", json::MakeInt(d.total));
       o.Set("channels", GroupsObject(d.groups));
-      o.Set("issued_at", json::MakeString(lic::FormatUtcTime(d.issued_at)));
+      o.Set("check_mode", json::MakeString(lic::CheckModeName(d.check_mode)));
+      // minimal 판정에서 issued_at 을 읽지 못하면 0: 1970-01-01 로 보이지 않게 빈 문자열
+      const bool no_issued_at = d.check_mode == lic::CheckMode::Minimal && d.issued_at == 0;
+      o.Set("issued_at", json::MakeString(no_issued_at ? "" : lic::FormatUtcTime(d.issued_at)));
       o.Set("not_before", json::MakeString(lic::FormatUtcTime(d.not_before)));
       o.Set("not_after", json::MakeString(lic::FormatUtcTime(d.not_after)));
     }

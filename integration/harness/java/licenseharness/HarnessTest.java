@@ -1,5 +1,6 @@
 package licenseharness;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -45,6 +46,26 @@ public class HarnessTest {
   static int totalUsed(String info) {
     Matcher m = Pattern.compile("\"total\":\\{\"max\":(\\d+),\"used\":(\\d+)\\}").matcher(info);
     return m.find() ? Integer.parseInt(m.group(2)) : -1;
+  }
+
+  /**
+   * check_mode "minimal" 시험 파일을 직접 서명해 만든다(licensectl 은 check_mode 를 넣지 않으므로).
+   * body 는 RFC 8785 정규형이어야 한다: ASCII·정수만 쓰고 키를 사전순으로 둔 공백 없는 JSON 이면 같다.
+   * 키는 check.sh 가 만든 시험용 키(workdir/keys/private.key)다.
+   */
+  static String signRaw(Path dir, String body) throws Exception {
+    String line = Files.readString(dir.resolve("keys/private.key"), StandardCharsets.UTF_8).strip();
+    byte[] seed = java.util.Base64.getDecoder().decode(line.substring(line.indexOf(':') + 1));
+    byte[] der = java.util.HexFormat.of().parseHex("302e020100300506032b657004220420");  // PKCS#8 Ed25519 머리
+    byte[] pkcs8 = java.util.Arrays.copyOf(der, der.length + seed.length);
+    System.arraycopy(seed, 0, pkcs8, der.length, seed.length);
+    java.security.PrivateKey key = java.security.KeyFactory.getInstance("Ed25519")
+        .generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(pkcs8));
+    java.security.Signature s = java.security.Signature.getInstance("Ed25519");
+    s.initSign(key);
+    s.update(body.getBytes(StandardCharsets.UTF_8));
+    String sig = java.util.Base64.getEncoder().encodeToString(s.sign());
+    return body.substring(0, body.length() - 1) + ",\"signature\":\"" + sig + "\"}";
   }
 
   public static void main(String[] args) throws Exception {
@@ -180,6 +201,29 @@ public class HarnessTest {
         "옛 설정 --license-verify-mode=signature 가 있어도 만료 → 1008 (서명만 보는 경로 없음)");
     check(sdk.connectHostLicense(null, sigCfg, valid) == 0, "옛 설정이 있어도 유효 라이선스 → 0");
     check(sdk.connectHostLicense(null, sigCfg, tampered) == 1004, "변조 → 1004 (서명 검증이 먼저)");
+
+    System.out.println("[check_mode: 판 2(이 코어가 모르는 판) minimal 파일은 안정 필드·기간만 판정]");
+    check(sdk.connectHostLicense(null, noCfg, valid) == 0 && "full".equals(field(sdk.hostLicenseInfo(), "check_mode")),
+        "키 없는 판 1 파일 → 적용 수준 full");
+    String hi = sdk.hostLicenseInfo();
+    check("3.0.0".equals(field(hi, "library_version")) && intField(hi, "max_license_ver") == 1,
+        "라이브러리 버전·아는 판 조회(현장 로그용): " + field(hi, "library_version") + ", max_license_ver=" + intField(hi, "max_license_ver"));
+    String minimalBody = "{\"allowed_channels\":{\"offline\":{\"sonaasr\":3,\"sonastt\":3},\"total\":3},"
+        + "\"check_mode\":\"minimal\",\"license_id\":\"0123456789abcdef0123456789abcdef\",\"license_ver\":2,"
+        + "\"validity\":{\"not_after\":\"9999-12-31T23:59:59Z\",\"not_before\":\"2020-01-01T00:00:00Z\"}}";
+    String minimal = signRaw(dir, minimalBody);
+    check(sdk.connectHostLicense(null, sigCfg, minimal) == 0, "판 2 minimal 파일(표시 필드 없음) → 0");
+    hi = sdk.hostLicenseInfo();
+    check("minimal".equals(field(hi, "check_mode")) && intField(hi, "fields_total") == 3 && intField(hi, "offline_sonastt") == 3,
+        "적용 수준 minimal, 안정 필드 값 사용(total 3, offline.sonastt 3): " + hi);
+    check(sdk.connectHostLicense(null, sigCfg, signRaw(dir, minimalBody.replace("\"license_ver\":2", "\"license_ver\":1"))) == 1005,
+        "판 1(아는 판)이면 minimal 이어도 v1 전체 규칙 → 필수 필드 없음 1005");
+    check(sdk.connectHostLicense(null, sigCfg, signRaw(dir, minimalBody.replace("\"not_after\":\"9999-12-31T23:59:59Z\"",
+        "\"not_after\":\"2020-03-31T23:59:59Z\""))) == 1008, "minimal 도 기간 집행: 만료 → 1008");
+    check(sdk.connectHostLicense(null, sigCfg, signRaw(dir, minimalBody.replace("\"total\":3", "\"total\":2"))) == 1005,
+        "minimal 도 채널 규칙 집행: 세부 항목 상한 > total → 1005");
+    check(sdk.connectHostLicense(null, sigCfg, minimal.replace("\"total\":3", "\"total\":30")) == 1004,
+        "minimal 파일 변조 → 1004");
 
     sdk.disconnect();
     check(result(sdk.getSTTSessionInfo()) == 3, "disconnect 후 NOT_CONNECTED");

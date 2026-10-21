@@ -36,7 +36,7 @@
             </div>
           </div>
           <dl class="kv" th:if="${result['result'] == 'OK'}">
-            <th:block th:each="k : ${ {'license_ver','license_id','project_name','license_type','solution','site_id','issued_at','not_before','not_after','checked_at'} }">
+            <th:block th:each="k : ${ {'license_ver','check_mode','license_id','project_name','license_type','solution','site_id','issued_at','not_before','not_after','checked_at'} }">
               <dt class="mono small" th:text="${k}"></dt><dd th:classappend="${k == 'license_id'} ? 'mono copyable'" th:text="${result[k]}"></dd>
             </th:block>
             <dt class="mono small">allowed_channels</dt>

@@ -37,7 +37,7 @@ enum class Error {
   ParseError,          // JSON 형식 위반(중복 키, 실수, null, 배열 등 포함)
   BadSignature,        // 서명 누락·형식 오류·불일치
   InvalidField,        // 필수 필드 누락, 값 범위·형식 위반
-  UnsupportedVersion,  // license_ver 가 이 엔진이 아는 값(1)이 아님
+  UnsupportedVersion,  // 이 엔진이 모르는 형식: check_mode 가 없거나 "full"인데 license_ver ≠ 1, 또는 check_mode 값을 모름
   NotYetValid,         // not_before 이전
   Expired,             // not_after 이후
   ChannelLimit,        // 엔진별 상한 또는 total 상한까지 모두 사용 중 (잠시 후 재시도)
@@ -50,6 +50,18 @@ static_assert(static_cast<int>(Error::EngineNotLicensed) == 11, "Error codes are
 const char* ErrorName(Error e);     // 예: "LICENSE_BAD_SIGNATURE" (API 오류 코드로 사용)
 const char* ErrorMessage(Error e);  // 현장 조치 문구 (로그용)
 const char* StateName(State s);     // "NOT_YET_VALID", "VALID", "EXPIRED"
+
+// 실제로 적용한 판정 수준(라이선스 파일의 check_mode 값이 아니다).
+//   Full    : 이 엔진이 아는 형식(license_ver)이라 그 형식의 전체 규칙으로 판정함. check_mode 가 없음·"full"·"minimal" 모두
+//   Minimal : check_mode "minimal" 이고 이 엔진이 모르는 형식이라, 안정 필드(license_id, allowed_channels,
+//             validity.not_before·not_after)와 기간만 판정함. 표시용 필드는 비어 있을 수 있다
+enum class CheckMode { Full = 0, Minimal = 1 };
+const char* CheckModeName(CheckMode m);  // "full" / "minimal"
+
+// 이 라이브러리의 버전(예: "3.0.0")과 전체 규칙으로 판정할 수 있는 가장 높은 license_ver(그 이하는 모두 앎).
+// SDK 는 connect 때 로그에 남긴다. 현장 SDK 가 어떤 형식까지 아는지 확인하는 근거다.
+const char* LibraryVersion();
+int MaxLicenseVer();
 
 // 세부 항목(엔진) 하나의 채널 사용 현황. group = allowed_channels 의 항목 이름(예: "offline").
 struct ChannelUsage {
@@ -66,6 +78,7 @@ struct Info {
   std::int64_t issued_at = 0, not_before = 0, not_after = 0;
   std::int64_t checked_at = 0;                // 이 스냅샷을 만든 시각
   State state = State::Expired;
+  CheckMode check_mode = CheckMode::Full;     // 적용한 판정 수준. Minimal 이면 표시용 필드·issued_at 이 비어 있을 수 있음
   Error last_reload_error = Error::Ok;    // 마지막 파일 재적재 실패 사유 (성공/미변경이면 Ok)
 };
 
@@ -99,8 +112,10 @@ class VerifiedLicense {
   std::shared_ptr<const detail::VerifiedData> data_;
 };
 
-// 표준 형식(license_ver 1)의 판정된 값.
+// 판정된 값. check_mode 가 Minimal 이면 안정 필드(license_id, total_channels, channels, not_before, not_after)만
+// 판정했고, 나머지(license_ver, project_name 등, issued_at)는 형식이 맞을 때만 채워진다(아니면 빈 값·0).
 struct LicenseFields {
+  CheckMode check_mode = CheckMode::Full;
   int license_ver = 0;
   std::string license_id, project_name, license_type, solution, site_id, warning_notice;
   int total_channels = 0;                                // allowed_channels.total (전체 동시 세션 상한)
@@ -111,7 +126,9 @@ struct LicenseFields {
 State StateAt(const LicenseFields& fields, std::int64_t now_epoch_seconds);  // 운영 중 기간 재판정용
 
 // 내장 공개키로 라이선스를 판정한다. 순서: 크기(64 KiB) → BOM 제거 → 엄격 JSON → signature 형식(표준 Base64,
-// 64바이트)·Ed25519 서명 → 표준 필드(필수, 범위, license_ver, 시각 형식) → 기간(시스템 시각).
+// 64바이트)·Ed25519 서명 → check_mode → 표준 필드(필수, 범위, license_ver, 시각 형식) → 기간(시스템 시각).
+// 검사 수준은 라이선스가 정한다(설정으로 바꿀 수 없음): check_mode "minimal" 이고 이 엔진이 모르는 license_ver 면
+// 안정 필드와 기간만 판정한다(fields->check_mode == Minimal). 그 밖에는 전체 규칙이다.
 // 실패: FileTooLarge / ParseError / BadSignature / InvalidField / UnsupportedVersion / NotYetValid / Expired /
 // Internal(내장 공개키 손상). 실패하면 out·fields 를 채우지 않는다. fields 는 nullptr 가능.
 // license_text 는 표준 UTF-8 이어야 한다(JNI 에서는 Utf16ToUtf8 사용). ParseError 는 문법 단계 실패라서

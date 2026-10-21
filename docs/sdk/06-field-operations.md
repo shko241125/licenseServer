@@ -30,7 +30,7 @@ licensectl verify -pub public.key -at 2027-09-25T00:00:00Z license.lic    # 특�
 | 1003 | `LICENSE_PARSE_ERROR` | JSON 아님·형식 위반(편집 흔적, 기존 `.key`) | 원본 재배치. 기존 `.key`라면 새 형식 라이선스 요청 또는 공존 설정 확인 |
 | 1004 | `LICENSE_BAD_SIGNATURE` | 내용 수정 또는 다른 키로 서명(개발용·타 제품) | 원본 재배치. 계속되면 발급처에 문의(제품 빌드와 발급 키 확인) |
 | 1005 | `LICENSE_INVALID_FIELD` | 필드 규격 위반 | 발급처 재발급 |
-| 1006 | `LICENSE_UNSUPPORTED_VERSION` | 엔진이 모르는 형식 버전(더 새로운 `license_ver`) | 엔진 업그레이드 또는 호환 라이선스 요청 |
+| 1006 | `LICENSE_UNSUPPORTED_VERSION` | 엔진이 모르는 형식(더 새로운 `license_ver`이고 `check_mode`가 없음, 또는 모르는 `check_mode` 값) | 엔진 업그레이드 또는 이 엔진이 아는 형식의 라이선스 요청. 엔진이 아는 형식은 로그의 `library_version`·`max_license_ver`(02-integration.md §4)로 알려 줌 |
 | 1007 | `LICENSE_NOT_YET_VALID` | 시작일 이전 | 호스트 시계(UTC) 확인. 시작일 전 설치라면 대기 |
 | 1008 | `LICENSE_EXPIRED` | 종료 시각 지남(시험·개발. 운영은 영구) | 갱신본 설치 |
 | 1009 | `LICENSE_CHANNEL_LIMIT` | 세부 항목(엔진) 상한 또는 전체(`total`) 채널 모두 사용 중 | 정상 동작. 지속되면 채널 증설 계약 |

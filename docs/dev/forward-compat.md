@@ -1,6 +1,6 @@
 # 라이선스 전방 호환: 결정과 구현 계획 (코어 3.0.0)
 
-- **상태:** 결정 완료(2026-10-21, D46). 구현 계획 확정. **1단계(`signature` 모드 삭제) 구현 완료**(2026-10-21, [remove-signature-mode.md](remove-signature-mode.md)), 2단계(`check_mode` 판정)는 구현 전. 처음 검토는 2026-10-19.
+- **상태:** 결정 완료(D46, D47 2026-10-21). **1단계(`signature` 모드 삭제)·2단계(`check_mode` 판정, 라이브러리 정보 API) 구현 완료**(2026-10-21, 결과 §14), `sdk-v3.0.0` 발행 전. 3·4단계는 필요해질 때(§13.7). 처음 검토는 2026-10-19.
 - **궁극 목표(사용자, 2026-10-21):** 발급 서버를 추가형으로 진화·확장해 ① 형식이 바뀐 뒤에도 **이전 형식 판으로 발급·검사**(하위 버전 발급)하고 ② `check_mode`로 **전방 호환**(이전 SDK가 새 형식을 받음)을 달성한다. 발급 서버 쪽 설계는 §13, 단계별 순서는 §13.7.
 - 버전: 공개 헤더 API를 삭제하므로 **3.0.0**입니다(처음 적은 2.1.0은 버전 규칙과 어긋난 오류, §10 R11).
 - **대상:** 이미 배포된 SDK(빌드할 때 고정된 정적 라이브러리)가 **나중에 형식이 바뀌어 발행된 라이선스**를 받을 수 있는가(전방 호환). 반대 방향(새 SDK가 이전 라이선스를 받음)은 §6.4.
@@ -146,7 +146,7 @@
 | 값 | 라이브러리 판정 | 쓰는 때 |
 |---|---|---|
 | 없음 또는 `"full"` | 현행 `full`: 버전 1, v1 전체 필드, 기간 | 처음 발급분. 추가형 발급분. **지금 발급분 전부(키 없음)** |
-| `"minimal"` | 이 코어가 **모르는** `license_ver`면 서명 + 안정 필드 + 기간만(나머지 필드는 판정하지 않음). **아는** `license_ver`면 그 판의 전체 규칙(R13, 3.0.0에서 아는 판은 1) | 판 2 이상의 발급분 중 받는 SDK가 그 판을 모를 수 있는 것(§13.8, I3 결정 대기). 안정 필드 유지가 발급 조건 |
+| `"minimal"` | 이 코어가 **모르는** `license_ver`면 서명 + 안정 필드 + 기간만(나머지 필드는 판정하지 않음). **아는** `license_ver`면 그 판의 전체 규칙(R13, 3.0.0에서 아는 판은 1) | 판 2 이상의 발급분 중 사이트 기록상 받는 SDK가 그 판을 모를 수 있는 것(D47 D3 안 C). 안정 필드 유지가 발급 조건 |
 | 그 밖의 문자열 | `1006` | 미래의 다른 수준에 대비해 실패 폐쇄 |
 | 문자열이 아님 | `1005` | — |
 
@@ -282,6 +282,8 @@ Manager는 운영 중에 채널을 잡을 때마다(`Acquire`) 다음을 다시 
 
 ## 9. 구현 계획 (코어 3.0.0)
 
+> **2단계도 완료(2026-10-21, §14).** 아래 표의 항목은 모두 반영했고 남은 것은 발행입니다.
+>
 > **1단계 완료(2026-10-21):** 검증 모드 API·`VerifySignature`·공개 `ParseStandardFields`·설정 삭제, 하네스·SDK 문서 갱신, `VERSION 3.0.0`. 결과와 수치는 [remove-signature-mode.md](remove-signature-mode.md) §6. 아래 표에서 1단계에 해당하는 항목은 끝났고, 남은 것은 `check_mode` 판정(2단계)입니다.
 
 SDK 첫 적용 착수 전에 끝내고 `sdk-v3.0.0`으로 발행합니다. 발급 서버의 발급 내용은 바뀌지 않습니다(`check_mode`를 넣지 않음 = `full`). 검증 화면 표시를 바꾸므로 발급 서버도 y 버전을 올려 발행합니다(D44).
@@ -437,7 +439,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 
 | 사이트 상황 | 발급 | 이유 |
 |---|---|---|
-| 모든 서버의 SDK 코어가 판 n을 앎 | 판 n(안 A: `minimal`, 안 C: 키 없음, §13.8 D3) | 아는 판이라 어느 쪽이든 판 n 전체 규칙으로 판정(R13) |
+| 모든 서버의 SDK 코어가 판 n을 앎 | 판 n, 키 없음(D47 안 C) | 아는 판이라 어느 쪽이든 판 n 전체 규칙으로 판정(R13) |
 | SDK 코어가 판 n을 모름, 판 n의 변경이 안정 필드를 지킴 | 판 n `minimal`, 또는 하위 판 | `minimal`이면 이전 SDK는 안정 필드만 판정. 새 필드는 이전 SDK에서 집행되지 않음(A8) |
 | 서버마다 SDK 코어가 다름(단계적 교체 중), 같은 파일을 함께 씀 | 판 n `minimal` | 한 파일로 두 종류 SDK가 모두 받음. **`minimal`이 꼭 필요한 경우** |
 | 판 n이 안정 필드를 바꿈 | **하위 판**(그 사이트 SDK가 아는 판) | `minimal`로도 이전 SDK가 받지 못함(§7.6 마지막 행). 아니면 SDK 재빌드 |
@@ -450,7 +452,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 |---|---|---|
 | I1 | **`validity.issued_at`은 항상 넣습니다.** 값은 발급 서버의 발급 시각(UTC, 초 단위)이고 DB `license.issued_at`과 같은 값입니다 | **이미 보장됨(여러 층).** 서버 `ContractValidator`가 `now`(초 단위)를 넣고 `Contract.toJson`이 항상 씀 → 코어 `SignContract`가 없으면 채움 → 판 1 `full` 판정이 필수로 요구해 자기 검증에서 막힘. DB 열 `NOT NULL`(V1). 시험 `IssueFlowIT`(`validity` 키가 정확히 `issued_at`·`not_before`·`not_after`). 판 2 이상에서도 같게: 그 판의 `SignContract`가 없으면 채우고, 그 판의 전체 규칙이 필수로 요구 |
 | I2 | `license_id`는 서버가 만든 32자리 16진수 | 이미 보장됨(`IssueService`) |
-| I3 | `check_mode`는 사람이 따로 고르지 않고 **정해진 규칙으로** 넣습니다. 판 1은 키 없음(= `full`). `"full"`을 명시한 파일은 발급하지 않습니다(없음과 같음). 판 2 이상의 규칙은 **결정 대기**: 안 A(항상 `"minimal"`) / 안 C(사이트 기록상 그 사이트의 모든 SDK가 그 판을 알면 키 없음, 아니면 `"minimal"`). §13.8 | 판 1: 이미 보장됨(`check_mode`는 허용 키가 아니라 계약에 넣으면 거부). 판 2: 그때 구현 |
+| I3 | `check_mode`는 사람이 따로 고르지 않고 **정해진 규칙으로** 넣습니다. 판 1은 키 없음(= `full`). `"full"`을 명시한 파일은 발급하지 않습니다(없음과 같음). 판 2 이상은 **안 C(D47)**: 사이트 기록상 그 사이트의 모든 SDK가 그 판을 알면 키 없음, 아니면(모름·혼재·업그레이드 예정) `"minimal"`. §13.8 | 판 1: 이미 보장됨(`check_mode`는 허용 키가 아니라 계약에 넣으면 거부). 판 2: 그때 구현 |
 | I4 | 화면에서 사람이 고르는 것은 **형식 판 하나**입니다. `check_mode`를 따로 고르는 칸은 두지 않습니다 | 판 2 때 구현 |
 | I5 | 판 2 이상의 자기 검증은 두 가지를 모두 통과해야 합니다: (a) 발급 코어의 그 판 전체 규칙(`ExtractFields`) (b) 고정된 최소 판정 `ExtractMinimal`을 **직접 호출**(R18) | 판 2 때 구현. (b)는 3.0.0의 함수를 그대로 씀 |
 | I6 | 하위 판의 발급 코드는 고치지 않습니다(판 1의 `SignContract` 규칙·`Contract.toJson`·`ContractValidator`). 같은 키·ID·시각으로 발급한 결과 바이트를 고정 시험으로 둡니다 | 판 2 때 시험 추가(기존 골든 파일은 그대로) |
@@ -469,7 +471,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 | `ContractValidator` | 판별 규칙, 경계값 일치 시험(`ValidationParityTest`)을 판마다 |
 | 화면 | `form.html`: 판이 둘 이상일 때만 "형식 판" 선택(기본값: 갱신이면 원본 판, 새 발급이면 그 `site_id`의 마지막 발급 판, 없으면 최신 판), 판에 없는 입력칸은 숨김. `preview.html`·`detail.html`·`list.html`: 판과 `check_mode` 표시, I8 판정 결과. `verify.html`: `license_ver`·`check_mode`·적용한 규칙 |
 | 저장 | `LicenseRepository`·`IssueService`(감사 기록)가 상수 대신 계약의 판을 씀. `LicenseRecord`에 `checkMode` |
-| DB(새 마이그레이션) | `license_ver` 제약을 `CHECK (license_ver = 1)`(V3)에서 아는 판 목록으로 바꿈. `check_mode` 열(NULL 허용) 추가, I3을 DB `CHECK`로도 고정(안 A: `(license_ver = 1 AND check_mode IS NULL) OR (license_ver >= 2 AND check_mode = 'minimal')`, 안 C: `check_mode IS NULL OR (license_ver >= 2 AND check_mode = 'minimal')`). `license_guard()`의 불변 비교 목록에 `check_mode`. V1~V6은 고치지 않음 |
+| DB(새 마이그레이션) | `license_ver` 제약을 `CHECK (license_ver = 1)`(V3)에서 아는 판 목록으로 바꿈. `check_mode` 열(NULL 허용) 추가, I3을 DB `CHECK`로도 고정: `check_mode IS NULL OR (license_ver >= 2 AND check_mode = 'minimal')`(D47 안 C). `license_guard()`의 불변 비교 목록에 `check_mode`. V1~V6은 고치지 않음 |
 | 배포 | 서버 이미지 빌드에서 SDK 최저 코어 `licensectl`을 태그로 빌드해 넣음(I8). 서버 패키지 버전 y를 올림(D44) |
 
 ### 13.5 검사 (발급 서버 검증 화면)
@@ -478,7 +480,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 
 ### 13.6 미결
 **지금 확인이 필요한 것(2단계 구현 전):**
-0. §13.8의 D1~D4. D46 ②를 구체화하는 것이므로, 정하면 새 결정 번호로 기록합니다.
+0. ~~§13.8의 D1~D4~~ → **결정됨(2026-10-21, D47): D1 ①, D2 ①, D3 안 C, D4 예.**
 
 **판 2를 만들 때 결정할 것:**
 1. 사이트별 SDK 코어 기록 방식: 발급 화면에서 사람이 판을 고르기(기본값 규칙 §13.4) / 사이트 장부(`site_id` → SDK 코어 버전)를 따로 둠
@@ -489,7 +491,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | `signature` 모드 삭제(코어 3.0.0) | **완료**(2026-10-21, `73e9f13`) |
-| 2 | `check_mode` 판정(§9, R13 포함), `licensectl verify`·`InfoToJson` 출력, 발급 서버 검증 화면에 `license_ver`·`check_mode` 표시, I1·I3을 지키는지 확인하는 시험(발급 파일에 `issued_at`이 있고 DB 값과 같음, `check_mode` 없음), `sdk-v3.0.0` 발행, 발급 서버 y 버전 발행(새 `licensectl` 포함) | SDK 첫 적용 전 |
+| 2 | `check_mode` 판정(§9, R13 포함), `licensectl verify`·`InfoToJson` 출력, 발급 서버 검증 화면에 `license_ver`·`check_mode` 표시, I1·I3을 지키는지 확인하는 시험(발급 파일에 `issued_at`이 있고 DB 값과 같음, `check_mode` 없음), `sdk-v3.0.0` 발행, 발급 서버 y 버전 발행(새 `licensectl` 포함) | **구현 완료**(2026-10-21, §14). 발행(`sdk-v3.0.0`, 서버)은 남음 |
 | 3 | 첫 추가형 새 필드: A1~A10, §6.2 변경 목록, C4(SDK 최저 코어 시험), I8 | 필요해질 때 |
 | 4 | 첫 비추가형 변경(판 2): §13.4 전체, I3~I7, 하위 버전 발급 | 필요해질 때. §13.6 결정 후 |
 
@@ -511,7 +513,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 | D3 (I3) | 판 2 이상에 `minimal`을 언제 넣나 | 안 A: 항상 / 안 C: 사이트 기록상 모든 SDK가 그 판을 알면 키 없음, 아니면(모름·혼재·업그레이드 예정) `minimal` | §13.8 아래 비교 |
 | D4 (R23) | 3.0.0에 라이브러리 정보 조회 API를 넣나 | 예: `LibraryVersion()`(예 `"3.0.0"`), `MaxLicenseVer()`(예 1)를 SDK가 `connect` 때 로그에 남김 / 아니오 | **예**. 사이트 SDK가 아는 판을 현장 로그로 확인할 수 있는 유일한 길. 첫 적용 코어에만 넣을 수 있음(나중에 넣으면 이미 나간 SDK는 알려 주지 못함) |
 
-**D3 비교.**
+**D3 비교.** (결정: 안 C)
 | | 안 A(판 2 이상은 항상 `minimal`) | 안 C(기록 기반) |
 |---|---|---|
 | 사이트 SDK가 판을 알 때 | 키 없음과 결과 같음(D1 ①) | 키 없음 |
@@ -522,3 +524,44 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 
 - 판 1만 있는 동안(지금, 2단계까지)은 D3과 무관합니다. 판 1은 언제나 키 없음입니다.
 - 사용자 질문 "이전보다 높은 판이 아니면 `full`로 다시 발행해도 되나": **된다.** 다만 기준은 "그 사이트의 이전 라이선스 판"이 아니라 "그 사이트 SDK가 아는 판"입니다. 이전 라이선스가 키 없음(`full`)으로 받아들여졌다면 그 판은 안다는 증거가 됩니다. 이전 라이선스가 `minimal`이었다면 아무 증거가 되지 않습니다(모르는 SDK도 받으므로).
+
+## 14. 2단계 구현 결과 (2026-10-21)
+
+### 14.1 구현한 것
+| 파일 | 내용 |
+|---|---|
+| `core/include/stt_license/license.h` | `CheckMode`(적용한 수준), `CheckModeName`, `LibraryVersion`, `MaxLicenseVer`, `LicenseFields::check_mode`, `Info::check_mode`. `UnsupportedVersion`·`VerifyLicense` 주석 |
+| `core/src/detail.h` | `kLibraryVersion = "3.0.0"`, `LicenseData::check_mode`, 내부 `ExtractMinimal` 선언 |
+| `core/src/license.cpp` | `ExtractFields` 앞에 `check_mode` 분기(문자열 아님 `1005`, 모르는 값 `1006`, `minimal` + 모르는 판만 `ExtractMinimal`). `ExtractMinimal`(안정 필드: `license_id` → 채널 → 기간 형식·순서, 표시 필드는 `detail`을 쓰지 않고 읽음). 문자열 규칙 `CheckText`를 판정과 표시 읽기가 함께 씀. "1 이상인 값"·기간 순서 검사를 `full`과 공유(오류 순서·문구 그대로) |
+| `core/src/manager.cpp` | `Snapshot`·`InfoToJson`에 `check_mode`, `minimal`이고 `issued_at` 0이면 빈 문자열. `UnsupportedVersion` 안내 문구 |
+| `tools/licensectl/main.cpp` | `verify` 요약·`-json`에 `check_mode`, `issued_at` 규칙 같음 |
+| `CMakeLists.txt` | `kLibraryVersion`과 `project(VERSION)`이 다르면 구성 단계에서 중단. 새 시험 파일 등록 |
+| `core/tests/check_mode_test.cpp`(새) | M1~M17·M21~M26, A10, I3(발급기가 `check_mode` 거부), 라이브러리 정보, `ExtractMinimal` 직접 호출 |
+| `core/tests/manager_test.cpp` | `full` → 판 2 `minimal` 교체, `InfoToJson`, M18~M20. 고정 JSON 기대값에 `check_mode` |
+| `core/fuzz/fuzz_parse.cpp` | 불변식: `Full`이면 `license_ver` 1, `Minimal`이면 파일이 `"minimal"`이고 모르는 판 |
+| `integration/harness/*` | 상태 JSON에 `check_mode`·`library_version`·`max_license_ver`. Java 시험이 JDK Ed25519로 판 2 `minimal` 파일을 서명해 연결·기간·채널·변조·판 1 `minimal` 확인 |
+| `scripts/check.sh` | `verify -json`의 `check_mode`, 계약에 `check_mode`를 넣으면 발급 거부(I3) |
+| 발급 서버 | `verify.html`에 `check_mode` 표시, `IssueFlowIT`에 I1(파일 `issued_at` = DB 발급 시각) |
+| SDK 문서 | 02(API 표, `connect` 로그, §5, §7 안정 필드만), 03·06(`1006`), 04(§2 `check_mode`, §5 안정 필드·`minimal`·추가형 규칙), 05(수용 기준), README(3.0.0 이력) |
+
+### 14.2 검증
+| 항목 | 결과 |
+|---|---|
+| `scripts/check.sh` | `ALL CHECKS PASSED`(7단계). C++ 단위(ASan+UBSan) 64개, JNI 결합 57항목, export `Java_*` 10개, LD_PRELOAD 차단·대조군, CMake 소비자 |
+| 퍼저 | clang, 판 2·판 1 `minimal` 시드, 90초 675,551회 충돌 0 |
+| 발급 서버 | 단위 93개, 통합 24개 통과(새 `licensectl`) |
+| 구성 확인 | `kLibraryVersion`을 일부러 다르게 바꾸면 CMake 구성이 멈추고, 되돌리면 통과 |
+| 골든 파일·`Error` 순번 | 변경 없음 |
+
+### 14.3 구현하면서 바로잡은 계획 (실제 코드와 다르던 것)
+| # | 계획 | 실제 | 고친 내용 |
+|---|---|---|---|
+| R24 | "퍼저 시드에 `minimal` 1건 추가" | 저장소에 퍼저 시드 모음(corpus)이 없음(`core/fuzz/`에는 `fuzz_parse.cpp`뿐) | 실행할 때 시드 디렉터리를 줌(이번 실행은 세션 임시 디렉터리). 불변식은 코드에 추가 |
+| R25 | "I3 시험(발급 파일에 `check_mode` 없음) 추가" | `IssueFlowIT`가 이미 발급 파일의 최상위 키를 정확히 비교함 | 새로 넣은 것은 I1(`issued_at` = DB 값)뿐. 코어·`check.sh`에는 "계약에 `check_mode`가 있으면 거부" 시험을 추가 |
+| R26 | "2단계에 발급 서버 y 버전 발행" | 발행(태그·패키지)은 사용자 요청 작업 | 코드와 시험만 반영. 서버 버전은 그대로(1.7.0). 발행할 때 `build.gradle.kts` 버전을 올림 |
+| R27 | 라이브러리 버전을 어디서 가져올지 정하지 않음 | 코드에는 버전 문자열이 없고, CMake를 쓰지 않는 빌드(01-build.md §9)도 있음 | `detail.h` 상수 + CMake 구성 단계 일치 확인(매크로 주입은 CMake 밖 빌드에서 빠질 수 있어 쓰지 않음) |
+| R28 | 모르는 `check_mode` 값을 `detail`에 그대로 넣는 안 | 서명된 값이라도 최대 64 KiB·임의 문자 | 값은 넣지 않고 기대 값만 안내 |
+
+### 14.4 남은 것
+- `sdk-v3.0.0` 발행(`make-sdk-release.sh`), 발급 서버 발행(새 `licensectl`, `verify.html`), SDK 팀 전달 전 2.0.2 적용 여부 확인.
+- 3단계(첫 추가형 필드, C4·I8)와 4단계(판 2: 하위 버전 발급, `minimal` 발급, 사이트별 SDK 코어 기록)는 필요해질 때.

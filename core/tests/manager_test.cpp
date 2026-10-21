@@ -406,7 +406,7 @@ TEST_F(ManagerTest, InfoJson) {
   EXPECT_EQ(lic::InfoToJson(m->Snapshot()),
             "{\"channels\":{\"offline\":{\"sonaasr\":{\"max\":4,\"used\":0},\"sonaml\":{\"max\":4,\"used\":0},"
             "\"sonastt\":{\"max\":8,\"used\":0}},\"online\":{\"sonaasr\":{\"max\":2,\"used\":1},"
-            "\"sonastt\":{\"max\":8,\"used\":0}},\"total\":{\"max\":16,\"used\":1}},"
+            "\"sonastt\":{\"max\":8,\"used\":0}},\"total\":{\"max\":16,\"used\":1}},\"check_mode\":\"full\","
             "\"checked_at\":\"2026-10-01T00:00:00Z\",\"issued_at\":\"2026-09-21T00:00:00Z\","
             "\"last_reload_error\":\"OK\",\"license_id\":\"0123456789abcdef0123456789abcdef\","
             "\"license_type\":\"dev\",\"not_after\":\"2027-09-20T23:59:59Z\","
@@ -481,6 +481,37 @@ TEST_F(ManagerTest, ConcurrentReloadAndAcquire) {
   for (auto& u : users) u.join();
   EXPECT_EQ(m->Snapshot().total_used, 0);
   EXPECT_TRUE(m->Snapshot().engines.size() > 0);
+}
+
+}  // namespace
+
+namespace {
+
+// check_mode "minimal" + 모르는 판(2): 운영 중 full 파일에서 교체해도 안정 필드로 집행하고, 표시 필드는 비어 있을 수 있다.
+TEST_F(ManagerTest, ReloadToMinimalFileOfUnknownVersion) {
+  std::unique_ptr<Manager> m = MustOpen();
+  EXPECT_EQ(m->Snapshot().check_mode, lic::CheckMode::Full);
+  std::string json = Replace(Contract::Dated().Json(), "\"license_ver\":1,", "\"check_mode\":\"minimal\",\"license_ver\":2,");
+  json = Replace(json, "\"issued_at\":\"2026-09-21T00:00:00Z\",", "");
+  json = Replace(json, "\"site_id\":\"SEOUL-MAIN-DC\"", "\"site_id\":123");
+  json = Replace(json, "\"sonaml\":4,", "");
+  ReplaceFile(path_, SignRaw(json));
+  ASSERT_EQ(m->Reload(), Error::Ok);
+  lic::Info i = m->Snapshot();
+  EXPECT_EQ(i.check_mode, lic::CheckMode::Minimal);
+  EXPECT_EQ(i.site_id, "");
+  EXPECT_EQ(i.issued_at, 0);
+  const std::string js = lic::InfoToJson(i);
+  EXPECT_NE(js.find("\"check_mode\":\"minimal\""), std::string::npos) << js;
+  EXPECT_NE(js.find("\"issued_at\":\"\""), std::string::npos) << js;   // 1970 으로 보이지 않음
+  EXPECT_NE(js.find("\"not_after\":\"2027-09-20T23:59:59Z\""), std::string::npos) << js;
+  Channel ch;
+  EXPECT_EQ(m->Acquire("offline", "sonaml", &ch), Error::EngineNotLicensed);  // M18
+  std::vector<Channel> held(8);
+  for (auto& c : held) ASSERT_EQ(m->Acquire("offline", "sonastt", &c), Error::Ok);
+  EXPECT_EQ(m->Acquire("offline", "sonastt", &ch), Error::ChannelLimit);      // M19
+  now_ = T("2027-09-21T00:00:00Z");
+  EXPECT_EQ(m->Acquire("offline", "sonaasr", &ch), Error::Expired);           // M20
 }
 
 }  // namespace
