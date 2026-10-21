@@ -261,7 +261,7 @@ Error ParseAndVerify(std::string_view bytes, const uint8_t pub[crypto::kPublicKe
   return ExtractFields(root, out, detail);
 }
 
-// ---- 서명 전용 검증 (공개 API) ----
+// ---- 서명 단계 (내부: VerifyLicenseWith 의 첫 단계) ----
 
 Error VerifySignatureWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize],
                           VerifiedLicense* out, std::string* detail) {
@@ -376,26 +376,6 @@ Error VerifyLicenseWith(const std::string& license_text, const uint8_t pub[crypt
   *out = std::move(v);  // 모든 검증을 통과했을 때만 결과를 채운다
   if (fields) *fields = std::move(f);
   return Error::Ok;
-}
-
-Error VerifyWith(const std::string& license_text, VerifyMode mode, const uint8_t pub[crypto::kPublicKeySize],
-                 int64_t now, VerifiedLicense* out, LicenseFields* fields, std::string* detail) {
-  switch (mode) {
-    case VerifyMode::SignatureOnly: return VerifySignatureWith(license_text, pub, out, detail);
-    case VerifyMode::Full: return VerifyLicenseWith(license_text, pub, now, out, fields, detail);
-  }
-  if (detail) *detail = "unknown verify mode";
-  return Error::Internal;
-}
-
-const char* VerifyModeName(VerifyMode mode) {
-  return mode == VerifyMode::Full ? "full" : "signature";
-}
-
-bool ParseVerifyMode(const std::string& name, VerifyMode* mode) {
-  if (name == "signature") { *mode = VerifyMode::SignatureOnly; return true; }
-  if (name == "full") { *mode = VerifyMode::Full; return true; }
-  return false;
 }
 
 bool Utf16ToUtf8(const std::uint16_t* s, std::size_t n, std::string* out) {

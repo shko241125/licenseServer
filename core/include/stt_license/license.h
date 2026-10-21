@@ -1,7 +1,7 @@
 // stt_license — 폐쇄망 오프라인 라이선스 검증·집행 코어 (SDK 공개 헤더)
 //
-// 두 가지 사용 방식:
-//  (A) 서명만 공통 검증하고 값 정책은 SDK 가 결정 — VerifySignature (JNI connect 의 String hostLicense 등)
+// 두 가지 사용 방식. 어느 쪽이든 서명·표준 필드·기간을 모두 판정한다(서명만 보는 방식은 없다).
+//  (A) 라이선스 문자열 판정 — VerifyLicense (JNI connect 의 String hostLicense 등). 채널 값 적용은 SDK 가 한다.
 //  (B) 파일 경로 + 값 정책(기간·채널 한도·재적재) 내장 — Manager
 //
 // (B) 사용 흐름 (SDK):
@@ -75,11 +75,11 @@ class Manager;
 namespace detail { struct Config; struct Shared; struct VerifiedData; struct VerifiedAccess; }
 
 // ---------------------------------------------------------------------------------------------
-// (A) 서명 전용 검증
+// (A) 라이선스 문자열 판정
 // ---------------------------------------------------------------------------------------------
 
-// 서명 검증을 통과한 라이선스. 값은 서명된 내용에서만 꺼낼 수 있다(서명 범위 밖의 값은 존재하지 않음).
-// 필수 필드·범위·기간은 검증하지 않았다 — 무엇을 어떻게 쓸지는 호출자(SDK)가 결정한다.
+// VerifyLicense 를 통과한 라이선스(서명·표준 필드·기간 판정 완료). 값은 서명된 내용에서만 꺼낼 수 있다
+// (서명 범위 밖의 값은 존재하지 않음). 표준 필드는 LicenseFields 로 받는 편이 낫고, 이 조회는 그 밖의 값용이다.
 // 경로는 점으로 구분한다: "site_id", "allowed_channels.total", "allowed_channels.offline.sonastt", "validity.not_after".
 class VerifiedLicense {
  public:
@@ -99,13 +99,7 @@ class VerifiedLicense {
   std::shared_ptr<const detail::VerifiedData> data_;
 };
 
-// 내장 공개키로 서명만 검증한다. 검사 항목: 크기(64 KiB), BOM 제거, 엄격 JSON 파싱(정규화에 필요),
-// signature 형식(표준 Base64, 64바이트), Ed25519 서명. 실패 시 FileTooLarge / ParseError / BadSignature /
-// Internal(내장 공개키 손상). license_text 는 표준 UTF-8 이어야 한다(JNI 에서는 Utf16ToUtf8 사용).
-Error VerifySignature(const std::string& license_text, VerifiedLicense* out, std::string* detail = nullptr);
-
-// 선택 도우미: 표준 형식(license_ver 1) 규칙으로 필드를 해석·검증한다(필수 필드, 범위, license_ver, 시각 형식).
-// 쓸지 말지는 SDK 가 결정한다. 실패 시 InvalidField(license_ver 없음 포함) / UnsupportedVersion(license_ver ≠ 1).
+// 표준 형식(license_ver 1)의 판정된 값.
 struct LicenseFields {
   int license_ver = 0;
   std::string license_id, project_name, license_type, solution, site_id, warning_notice;
@@ -114,22 +108,16 @@ struct LicenseFields {
   std::map<std::string, std::map<std::string, int>> channels;
   std::int64_t issued_at = 0, not_before = 0, not_after = 0;  // UTC epoch 초 (영구 = 9999-12-31T23:59:59Z)
 };
-Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, std::string* detail = nullptr);
-State StateAt(const LicenseFields& fields, std::int64_t now_epoch_seconds);
+State StateAt(const LicenseFields& fields, std::int64_t now_epoch_seconds);  // 운영 중 기간 재판정용
 
-// 서명 + 값 검증: VerifySignature → ParseStandardFields → 기간 판정(시스템 시각).
-// NotYetValid·Expired 면 실패. fields 는 nullptr 가능.
+// 내장 공개키로 라이선스를 판정한다. 순서: 크기(64 KiB) → BOM 제거 → 엄격 JSON → signature 형식(표준 Base64,
+// 64바이트)·Ed25519 서명 → 표준 필드(필수, 범위, license_ver, 시각 형식) → 기간(시스템 시각).
+// 실패: FileTooLarge / ParseError / BadSignature / InvalidField / UnsupportedVersion / NotYetValid / Expired /
+// Internal(내장 공개키 손상). 실패하면 out·fields 를 채우지 않는다. fields 는 nullptr 가능.
+// license_text 는 표준 UTF-8 이어야 한다(JNI 에서는 Utf16ToUtf8 사용). ParseError 는 문법 단계 실패라서
+// 기존 .key 공존 분기 조건으로 쓸 수 있다(다른 실패는 기존 경로로 보내지 않는다).
 Error VerifyLicense(const std::string& license_text, VerifiedLicense* out, LicenseFields* fields,
                     std::string* detail = nullptr);
-
-// 하나의 진입점에서 검증 수준을 고른다(SDK 설정값에 따라 전환할 때). bool 대신 열거형을 받아 호출부가 읽힌다.
-//   SignatureOnly: VerifySignature 와 같음 (fields 는 건드리지 않음) — 기존 SDK 정책을 유지할 때
-//   Full         : VerifyLicense 와 같음 — 표준 필드·기간까지 코어 규칙으로 검증할 때
-enum class VerifyMode { SignatureOnly = 0, Full = 1 };
-Error Verify(const std::string& license_text, VerifyMode mode, VerifiedLicense* out,
-             LicenseFields* fields = nullptr, std::string* detail = nullptr);
-const char* VerifyModeName(VerifyMode mode);                       // "signature" / "full"
-bool ParseVerifyMode(const std::string& name, VerifyMode* mode);   // 설정 문자열 → 모드 (그 외 false)
 
 // UTF-16 → 표준 UTF-8. JNI 의 jstring 은 GetStringUTFChars(변형 UTF-8: 보조 평면 문자·NUL 의 바이트가 다름)
 // 대신 GetStringRegion 으로 받은 UTF-16 을 이 함수로 변환해야 서명한 바이트와 같아진다.

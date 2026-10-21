@@ -37,7 +37,7 @@ licensectl verify -pub public.key -at 2027-09-25T00:00:00Z license.lic    # 특�
 | 1010 | `LICENSE_INTERNAL_ERROR` | 내장 공개키 손상 등 | 엔진 재설치, 개발사 문의 |
 | 1011 | `LICENSE_ENGINE_NOT_LICENSED` | 라이선스에 없거나 상한 0인 항목·세부 항목 | 엔진 설정과 라이선스의 항목 이름(`licensectl verify`) 확인. 필요하면 해당 항목을 넣어 재발급 |
 
-1007·1008은 `full` 모드에서만 나옵니다. `signature` 모드의 기간 관련 오류는 SDK의 별도 만료 장치가 출력하는 메시지를 따릅니다.
+1007·1008은 모든 새 형식 라이선스에 대해 라이브러리가 판정합니다(코어 3.0.0부터 `signature` 모드 없음). 기존 `.key`의 기간 오류는 SDK의 별도 만료 장치가 출력하는 메시지를 따릅니다.
 
 ## 4. 알려진 한계 (계약·실사로 통제)
 

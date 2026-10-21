@@ -65,15 +65,17 @@ int64_t SystemNow();
 Error VerifyTree(std::string_view bytes, const uint8_t pub[crypto::kPublicKeySize], json::Value* root,
                  std::string* canonical, std::string* detail);
 
-// VerifySignature 의 공개키 지정판(테스트·도구용). 배포 빌드는 내장 키를 쓰는 VerifySignature 를 쓴다.
+// 서명 단계만 검증한다(판정의 첫 단계, 시험·도구용). 공개 API 에는 서명만 보는 함수가 없다(연결 허용 판단은
+// 항상 VerifyLicense·Manager 의 전체 판정).
 Error VerifySignatureWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize],
                           VerifiedLicense* out, std::string* detail);
+// 서명 단계를 통과한 결과에 표준 형식(license_ver 1) 규칙을 적용한다. VerifyLicenseWith 의 둘째 단계.
+// 실패 시 InvalidField(license_ver 없음 포함) / UnsupportedVersion(license_ver ≠ 1).
+Error ParseStandardFields(const VerifiedLicense& license, LicenseFields* out, std::string* detail = nullptr);
 
-// 시각·공개키 지정판(테스트용). 배포 빌드는 내장 키와 시스템 시각을 쓰는 VerifyLicense / Verify 를 쓴다.
+// 시각·공개키 지정판(테스트용). 배포 빌드는 내장 키와 시스템 시각을 쓰는 VerifyLicense 를 쓴다.
 Error VerifyLicenseWith(const std::string& license_text, const uint8_t pub[crypto::kPublicKeySize], int64_t now,
                         VerifiedLicense* out, LicenseFields* fields, std::string* detail);
-Error VerifyWith(const std::string& license_text, VerifyMode mode, const uint8_t pub[crypto::kPublicKeySize],
-                 int64_t now, VerifiedLicense* out, LicenseFields* fields, std::string* detail);
 
 namespace detail {
 struct VerifiedData {

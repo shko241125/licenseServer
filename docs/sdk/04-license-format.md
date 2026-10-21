@@ -39,14 +39,14 @@
 | 필드 | 발급 요청 | 최종 파일 |
 |---|---|---|
 | `license_ver` | 생략 가능(→ `1`) | 필수 |
-| `license_id` | 생략(발급 도구가 32자리 16진수 생성) | **필수** — 없으면 `full`·Manager `1005` |
+| `license_id` | 생략(발급 도구가 32자리 16진수 생성) | **필수** — 없으면 `VerifyLicense`·Manager `1005` |
 | `validity.issued_at` | 생략(→ 발급 시각) | 필수 |
 | `signature` | 넣으면 거부 | 필수(마지막 키) |
 | 나머지 | 입력한 값 그대로 | 같음 |
 
 실제 서명된 예: `core/testdata/golden_license.lic`, 공개키 `golden_public.key`, 서명 대상 바이트 `golden_canonical.json`.
 
-## 2. 필드 (표준 규칙 = `full` 모드, `ParseStandardFields`, `Manager`)
+## 2. 필드 (표준 규칙 = `VerifyLicense`, `Manager`)
 
 | 경로 | 타입 | 규칙 |
 |---|---|---|
@@ -124,7 +124,7 @@ RFC 8259의 **엄격한 부분집합**만 받습니다.
 
 | 항목 | 규칙 | 어기면 |
 |---|---|---|
-| `license_id` | **최종 파일에는 반드시 있어야 함**(1~128바이트). 계약 입력에서는 생략하면 발급 도구가 채움 | `full`·Manager에서 `1005`(`license_id: must be a string`). `signature` 모드는 통과하므로 놓치기 쉬움 |
+| `license_id` | **최종 파일에는 반드시 있어야 함**(1~128바이트). 계약 입력에서는 생략하면 발급 도구가 채움 | `VerifyLicense`·Manager에서 `1005`(`license_id: must be a string`) |
 | 정수 | `1`처럼 정수로 씀. Python의 `1.0` 같은 실수 표기 금지 | `1003`(`only integers are supported`) |
 | 서명 대상 바이트 | 정규화 결과를 **UTF-8 그대로**(Python은 `ensure_ascii=False`). `\uXXXX`로 이스케이프한 바이트에 서명하면 안 됨 | 한글 등 비ASCII가 있으면 `1004` |
 | 영구 `not_after` | **UTC epoch 초(64비트)로 비교**(9999-12-31T23:59:59Z = 253402300799). 현지 시각으로 바꾸지 않음 | KST(+9)로 바꾸면 10000년이 됨: Python `astimezone()`은 `OverflowError`. 32비트 `time_t`는 범위를 넘음 |
@@ -137,7 +137,6 @@ RFC 8259의 **엄격한 부분집합**만 받습니다.
   - `license_ver`를 올리지 않고 추가할 수 있습니다. 기존 SDK는 표준 규칙에서 이 필드를 무시합니다.
   - 새 SDK는 `Has`/`Get*`로 읽되, **값이 없을 때의 기본 동작**을 반드시 정해 둡니다.
   - 발급 도구는 엄격 발급이므로, 새 필드를 넣으려면 발급 도구(`SignContract`)의 허용 키 목록도 함께 고칩니다.
-- **`license_ver`**: 현재 `1`이며, SDK 적용 전이라 이전 버전은 없습니다. SDK 적용 이후 기존 필드의 의미·타입·필수 여부가 바뀔 때만 올립니다. 그 버전을 모르는 SDK는 `full` 모드에서 `1006`으로 거부합니다.
-  - 단, `signature` 모드는 버전을 보지 않습니다. 버전별 분기가 필요하면 SDK가 `GetInt("license_ver")`로 확인합니다.
+- **`license_ver`**: 현재 `1`이며, SDK 적용 전이라 이전 버전은 없습니다. SDK 적용 이후 기존 필드의 의미·타입·필수 여부가 바뀔 때만 올립니다. 그 버전을 모르는 SDK는 `1006`으로 거부합니다(서명만 보고 통과시키는 경로는 없음, 3.0.0).
 - **정규화 규칙과 골든 파일**(`core/testdata/golden_*`)은 바꾸지 않습니다. 바꾸면 이미 배포된 라이선스가 모두 깨집니다.
 - 기존 `sonaLicense.*.key`는 이 규격이 아닙니다(항상 `1003`).

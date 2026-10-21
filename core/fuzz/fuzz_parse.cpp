@@ -26,7 +26,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   lic::LicenseData d;
   lic::ParseAndVerify(in, kPub, &d, &err);
 
-  // 서명 전용 경로 + 값 조회(경로 파싱) — 서명이 맞을 수 없는 입력이지만 파싱·오류 경로를 탄다
+  // 서명 단계 + 값 조회(경로 파싱) — 서명이 맞을 수 없는 입력이지만 파싱·오류 경로를 탄다
   lic::VerifiedLicense verified;
   lic::VerifySignatureWith(in, kPub, &verified, &err);
   std::string s;
@@ -34,7 +34,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   verified.GetString(in.substr(0, 32), &s);
   verified.GetInt("allowed_channels.offline.sonastt", &n);
   lic::LicenseFields fields;
-  lic::VerifyWith(in, lic::VerifyMode::Full, kPub, 0, &verified, &fields, &err);
+  lic::VerifyLicenseWith(in, kPub, 0, &verified, &fields, &err);
   // 필드 해석 경로: 임의 객체에 고정 테스트 키로 서명을 붙여 검증한다. 위 경로들은 서명이 맞을 수 없어
   // 필드 해석(license_ver·채널 항목·total·기간·Manager 상태)까지 내려가지 못하므로 따로 태운다.
   if (lic::json::Parse(in, &v, &err) && v.type == lic::json::Value::Type::Object && !v.Find("signature")) {

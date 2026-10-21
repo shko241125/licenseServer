@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 버전 | 2.0.2 (`CMakeLists.txt`의 `project(... VERSION ...)`) |
+| 버전 | 3.0.0, 미발행 (`CMakeLists.txt`의 `project(... VERSION ...)`). 마지막 발행은 `sdk-v2.0.2` |
 | 대상 | STT SDK(C++/JNI, `libsonastt_jni_v2.so`) 개발자, STT 서버(Java) 개발자, 현장 설치 엔지니어 |
 | 받는 것 | 이 패키지(소스·문서·검증 도구) + 발급 담당이 주는 **공개키 파일 `public.key`**(Base64 44자) |
 | 받지 않는 것 | 비밀키, 발급 서버. 라이선스 발급은 발급 담당(사내 발급 서버)이 합니다 |
@@ -25,7 +25,7 @@ stt_license_harden_shared_library(sonastt_jni_v2)     # 필수: JNI 진입점 �
 std::string text;                                               // jstring → 표준 UTF-8 (GetStringUTFChars 금지)
 lic::Error e = JStringToUtf8(env, hostLicense, &text);
 lic::VerifiedLicense license;  lic::LicenseFields fields;
-if (e == lic::Error::Ok) e = lic::Verify(text, mode /* SignatureOnly | Full */, &license, &fields);
+if (e == lic::Error::Ok) e = lic::VerifyLicense(text, &license, &fields);   // 서명·표준 필드·기간
 if (e != lic::Error::Ok) return 1000 + static_cast<int>(e);    // 연결 거부
 ```
 ```bash
@@ -40,7 +40,7 @@ scripts/check.sh                                                                
 | 문서 | 내용 | 주 독자 |
 |---|---|---|
 | [01-build.md](01-build.md) | SDK CMake에 넣기, 옵션, OpenSSL 재사용, 심볼 은닉, 빌드 환경, 문제 해결 | SDK |
-| [02-integration.md](02-integration.md) | 코드 결합: 검증 API, `connect(hostLicense)` 구현, 검증 수준(`signature`/`full`), 기존 `.key` 공존, 오류 코드 | SDK |
+| [02-integration.md](02-integration.md) | 코드 결합: 검증 API, `connect(hostLicense)` 구현, 검사 수준(라이브러리가 정함), 기존 `.key` 공존, 오류 코드 | SDK |
 | [03-stt-server.md](03-stt-server.md) | STT 서버(Java) 측: 라이선스 읽기·전달, 오류 처리, 설정, Docker | 서버 |
 | [04-license-format.md](04-license-format.md) | 라이선스 파일 규격(필드·타입·범위), 정규화·서명 방식, 호환 규칙 | SDK·서버 |
 | [05-testing.md](05-testing.md) | 개발용 키·라이선스 만들기, 검증 스크립트, **SDK 적용 후 수용 기준** | SDK·QA |
@@ -79,12 +79,12 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 - 부모 프로젝트 C++14/C++20
 - 공개 헤더 C++11~20 `-Wpedantic -Werror`
 
-## 5. 정책 결정 현황 (2026-10-14)
+## 5. 정책 결정 현황 (2026-10-21)
 
 | 항목 | 상태 |
 |---|---|
-| 코어의 책임 | **서명 검증은 공통.** 값(`allowed_channels`, `validity` 등) 사용·판정은 SDK가 결정 |
-| 검증 수준 | `signature`(기본, 기존 SDK와의 호환 장치 — SDK의 별도 만료 장치 적용) / `full`(표준 필드·기간까지 코어 규칙으로). 시험·개발 라이선스를 받는 서버는 `full`(03-stt-server.md §3). 설정 키 예 `--license-verify-mode` |
+| 코어의 책임 | **판정은 공통**(서명·표준 필드·기간, 3.0.0). SDK는 판정된 값(채널 상한)을 세션 풀·동시 예약에 적용 |
+| 검사 수준 | 라이브러리가 정함(D46). 설정으로 고르는 `signature`/`full` 모드와 `--license-verify-mode`는 3.0.0에서 삭제. SDK의 별도 만료 장치는 기존 `.key` 경로에만 |
 | 라이선스 갱신 방식 | **미정(추후 결정)** — 세션·채널 수 반영 등 분석 필요(02-integration.md §8). 현재는 서버 재시작 |
 | 라이선스 형식 | `license_ver` 1. SDK 적용 전이라 이전 버전은 없고 호환 대상도 없음. SDK 적용 이후 형식이 바뀌면 올림 |
 | 채널 의미 | `allowed_channels.total` = 모든 항목·세부 항목의 **동시 세션 합계 상한**. 나머지는 이름 자유 항목 `"항목": {"세부 항목": 상한}`(예: `offline`, `online`) |
@@ -96,6 +96,7 @@ README.md, VERSION, SHA256SUMS    (발행 시 생성) 루트 안내, 버전·원
 
 | 버전 | 내용 |
 |---|---|
+| 3.0.0 (미발행) | **공개 API 삭제(호환 깨짐):** 서명만 보고 받아 주는 `signature` 모드 삭제 — `VerifyMode`, `Verify(text, mode, …)`, `ParseVerifyMode`, `VerifyModeName`, `VerifySignature`, 공개 `ParseStandardFields`. 문자열 방식의 판정은 `VerifyLicense` 하나(서명·표준 필드·기간). SDK 설정 `--license-verify-mode` 폐지(D46). `Error` 순번·골든 파일·라이선스 형식은 변경 없음 |
 | 2.0.2 | SDK 적용 전이라 이전 버전 호환을 두지 않음: 이전 형식 전용 처리 제거(`license_ver`가 없으면 `1005`), 1.x 업그레이드 안내(07) 삭제·관련 문서 정리. 발급 도구는 **규격에 있는 키만 서명**(엄격 발급 — 오타도 거부), **1회 발급 기간 상한** `trial` 180일·`dev` 366일(발급 정책. 검증기는 길이를 보지 않음). API·골든 파일·`license_ver` 1 라이선스의 검증 결과는 변경 없음 |
 | 2.0.1 | 발급 유형을 `production`(운영)·`trial`(시험·데모)·`dev`(개발)로 한정(`licensectl issue`/`SignContract`). **검증 동작·API 변경 없음** — 2.0.0을 적용한 SDK는 다시 빌드하지 않아도 됨. 문서 갱신 |
 | 2.0.0 | **라이선스 형식 변경(호환 깨짐):** `license_ver` 1, `solution`, `allowed_channels.total` + 이름 자유 항목별 세부 항목 상한(항목·항목당 세부 항목 각 64개 이하), 유예 기간 삭제(`State::Grace` 제거). `Kind` 삭제, `LicenseFields::channels`·`Info`·`Manager::Acquire(group, engine, …)`/`MaxChannels(group, engine)`/`TotalChannels()` API 변경, 오류 `1011 LICENSE_ENGINE_NOT_LICENSED` 추가. 이전 형식은 `1006`. 발급 정책(운영 영구) 강제. 골든 파일 재생성(공개키 동일). 다른 언어·도구로 서명할 때의 규칙(04 §4) |

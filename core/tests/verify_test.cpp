@@ -1,4 +1,4 @@
-// 서명 전용 검증 API (VerifySignature / VerifiedLicense / ParseStandardFields / Utf16ToUtf8)
+// 문자열 판정 API (VerifyLicense / VerifiedLicense / StateAt / Utf16ToUtf8) 와 그 첫 단계인 서명 단계(내부 VerifySignatureWith)
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -49,7 +49,7 @@ bool ToUtf8(const std::u16string& s, std::string* out) {
   return lic::Utf16ToUtf8(reinterpret_cast<const std::uint16_t*>(s.data()), s.size(), out);
 }
 
-TEST(VerifySignature, ValuesComeOnlyFromSignedTree) {
+TEST(SignatureStage, ValuesComeOnlyFromSignedTree) {
   lic::VerifiedLicense v = VerifyOk(Issue(Contract{}));
   ASSERT_TRUE(v.valid());
   std::string s;
@@ -78,7 +78,7 @@ TEST(VerifySignature, ValuesComeOnlyFromSignedTree) {
   EXPECT_EQ(v.canonical_json().find("signature"), std::string::npos);
 }
 
-TEST(VerifySignature, CanonicalJsonMatchesGolden) {
+TEST(SignatureStage, CanonicalJsonMatchesGolden) {
   const std::string dir = STT_TESTDATA_DIR;
   auto read = [&](const std::string& name) {
     std::ifstream f(dir + "/" + name, std::ios::binary);
@@ -90,8 +90,8 @@ TEST(VerifySignature, CanonicalJsonMatchesGolden) {
   EXPECT_EQ(v.canonical_json(), read("golden_canonical.json"));  // 서명 대상 바이트 그대로
 }
 
-// 공통 코어는 서명만 본다: 규격을 벗어난 값도 서명이 맞으면 Ok, 판정은 SDK 가 선택적으로 한다.
-TEST(VerifySignature, SignatureOnlyAcceptsNonStandardValues) {
+// 서명 단계는 값 규칙을 보지 않는다. 그래서 공개 API 에 서명만 보는 함수를 두지 않고, VerifyLicense 가 거부한다.
+TEST(SignatureStage, NonStandardValuesPassSignatureButVerifyLicenseRejects) {
   const std::string odd = SignRaw(
       "{\"license_ver\":7,\"allowed_channels\":{\"total\":999999},"
       "\"validity\":{\"not_after\":\"sometime\"},\"custom\":{\"beta_mode\":true}}");
@@ -110,9 +110,20 @@ TEST(VerifySignature, SignatureOnlyAcceptsNonStandardValues) {
   lic::VerifiedLicense v2 = VerifyOk(missing);
   EXPECT_EQ(lic::ParseStandardFields(v2, &f, &detail), Error::InvalidField);
   EXPECT_NE(detail.find("site_id"), std::string::npos);
+
+  auto pub = PublicOf(TestSeed());
+  const int64_t now = T("2027-01-01T00:00:00Z");
+  lic::VerifiedLicense out;
+  EXPECT_EQ(lic::VerifyLicenseWith(odd, pub.data(), now, &out, &f, &detail), Error::UnsupportedVersion);
+  EXPECT_EQ(lic::VerifyLicenseWith(missing, pub.data(), now, &out, &f, &detail), Error::InvalidField);
+  const std::string no_ver = SignRaw(Replace(Contract::Dated().Json(), "\"license_ver\":1,", ""));
+  lic::VerifiedLicense sig_only, full;
+  EXPECT_EQ(Verify(no_ver, &sig_only), Error::Ok);                               // 서명 단계는 통과
+  EXPECT_EQ(lic::VerifyLicenseWith(no_ver, pub.data(), now, &full, &f, &detail), Error::InvalidField);
+  EXPECT_FALSE(full.valid());                                                    // 실패하면 결과를 채우지 않음
 }
 
-TEST(VerifySignature, Rejections) {
+TEST(SignatureStage, Rejections) {
   const std::string text = Issue(Contract{});
   lic::VerifiedLicense v;
   EXPECT_EQ(Verify(Replace(text, "\"sonastt\": 8", "\"sonastt\": 16"), &v), Error::BadSignature);
@@ -129,7 +140,7 @@ TEST(VerifySignature, Rejections) {
   EXPECT_TRUE(ok.valid());
 }
 
-TEST(VerifySignature, EmptyObjectIsSafe) {
+TEST(SignatureStage, EmptyObjectIsSafe) {
   lic::VerifiedLicense v;
   std::string s;
   std::int64_t n;
@@ -141,7 +152,7 @@ TEST(VerifySignature, EmptyObjectIsSafe) {
   EXPECT_EQ(lic::ParseStandardFields(v, &f), Error::InvalidField);
 }
 
-TEST(VerifySignature, StandardFieldsAndState) {
+TEST(SignatureStage, StandardFieldsAndState) {
   lic::VerifiedLicense v = VerifyOk(Issue(Contract{}));
   lic::LicenseFields f;
   ASSERT_EQ(lic::ParseStandardFields(v, &f), Error::Ok);
@@ -164,7 +175,7 @@ TEST(VerifySignature, StandardFieldsAndState) {
   EXPECT_STREQ(lic::StateName(lic::StateAt(f, na + 1)), "EXPIRED");
 }
 
-// ---- 값 검증 포함(VerifyLicense) / 모드 선택(Verify) ----
+// ---- 전체 판정(VerifyLicense) ----
 
 Error Full(const std::string& text, int64_t now, lic::VerifiedLicense* v, lic::LicenseFields* f,
            std::string* detail = nullptr) {
@@ -195,57 +206,23 @@ TEST(VerifyLicense, PeriodAndFieldsAreEnforced) {
   EXPECT_EQ(Full(Issue(Contract{}), T("9999-12-31T23:59:59Z"), &v2, nullptr), Error::Ok);
 }
 
-// 하나의 진입점: 모드별 결과가 각각의 분리 함수와 정확히 같아야 한다.
-TEST(VerifyMode, SingleEntryMatchesSeparateFunctions) {
+// 실패하면 출력을 건드리지 않고, 성공하면 서명 단계와 같은 서명 대상 바이트를 담는다.
+TEST(VerifyLicense, OutputsOnlyOnSuccess) {
   auto pub = PublicOf(TestSeed());
   Contract old = Contract::Dated("2020-12-31T23:59:59Z");
   old.not_before = "2020-01-01T00:00:00Z";
   const std::string expired = Issue(old);
-  const std::string nonstandard = SignRaw("{\"license_ver\":7,\"allowed_channels\":{\"total\":999999}}");
-  // license_ver 가 없는 라이선스: 서명만 모드는 통과, 전체 모드는 InvalidField
-  const std::string no_ver = SignRaw(Replace(Contract::Dated().Json(), "\"license_ver\":1,", ""));
   const std::string valid = Issue(Contract{});
   const int64_t now = T("2027-01-01T00:00:00Z");
-  for (const std::string* text : {&valid, &expired, &nonstandard, &no_ver}) {
-    for (lic::VerifyMode mode : {lic::VerifyMode::SignatureOnly, lic::VerifyMode::Full}) {
-      lic::VerifiedLicense a, b;
-      Error ea = lic::VerifyWith(*text, mode, pub.data(), now, &a, nullptr, nullptr);
-      Error eb = mode == lic::VerifyMode::Full
-                     ? lic::VerifyLicenseWith(*text, pub.data(), now, &b, nullptr, nullptr)
-                     : lic::VerifySignatureWith(*text, pub.data(), &b, nullptr);
-      EXPECT_EQ(ea, eb) << lic::VerifyModeName(mode);
-      EXPECT_EQ(a.canonical_json(), b.canonical_json());
-    }
-  }
-  // 서명만: 만료·비표준 라이선스도 통과 / 전체: 거부 — SDK 가 상황에 따라 고른다
   lic::VerifiedLicense v;
-  EXPECT_EQ(lic::VerifyWith(expired, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
-  EXPECT_EQ(lic::VerifyWith(expired, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr), Error::Expired);
-  EXPECT_EQ(lic::VerifyWith(nonstandard, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
-  EXPECT_EQ(lic::VerifyWith(nonstandard, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
-            Error::UnsupportedVersion);
-  EXPECT_EQ(lic::VerifyWith(no_ver, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, nullptr, nullptr), Error::Ok);
-  EXPECT_EQ(lic::VerifyWith(no_ver, lic::VerifyMode::Full, pub.data(), now, &v, nullptr, nullptr),
-            Error::InvalidField);
-  // SignatureOnly 는 fields 를 건드리지 않는다
   lic::LicenseFields f;
   f.site_id = "untouched";
-  EXPECT_EQ(lic::VerifyWith(valid, lic::VerifyMode::SignatureOnly, pub.data(), now, &v, &f, nullptr), Error::Ok);
+  EXPECT_EQ(lic::VerifyLicenseWith(expired, pub.data(), now, &v, &f, nullptr), Error::Expired);
+  EXPECT_FALSE(v.valid());
   EXPECT_EQ(f.site_id, "untouched");
-  EXPECT_EQ(lic::VerifyWith(valid, lic::VerifyMode::Full, pub.data(), now, &v, &f, nullptr), Error::Ok);
+  ASSERT_EQ(lic::VerifyLicenseWith(valid, pub.data(), now, &v, &f, nullptr), Error::Ok);
   EXPECT_EQ(f.site_id, "SEOUL-MAIN-DC");
-}
-
-TEST(VerifyMode, ParseFromConfigString) {
-  lic::VerifyMode m = lic::VerifyMode::Full;
-  EXPECT_TRUE(lic::ParseVerifyMode("signature", &m));
-  EXPECT_EQ(m, lic::VerifyMode::SignatureOnly);
-  EXPECT_TRUE(lic::ParseVerifyMode("full", &m));
-  EXPECT_EQ(m, lic::VerifyMode::Full);
-  EXPECT_FALSE(lic::ParseVerifyMode("FULL", &m));   // 오타·대소문자는 거부 → SDK 가 기본값/오류를 명시적으로 결정
-  EXPECT_FALSE(lic::ParseVerifyMode("", &m));
-  EXPECT_STREQ(lic::VerifyModeName(lic::VerifyMode::SignatureOnly), "signature");
-  EXPECT_STREQ(lic::VerifyModeName(lic::VerifyMode::Full), "full");
+  EXPECT_EQ(v.canonical_json(), VerifyOk(valid).canonical_json());
 }
 
 TEST(Utf16ToUtf8, ConversionAndRejection) {

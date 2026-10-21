@@ -1,6 +1,6 @@
 # 02. 코드 결합 — SDK(JNI)에서 라이선스 검증하기
 
-STT 서버는 라이선스 **파일 내용**을 문자열로 SDK에 넘깁니다. SDK는 이 모듈로 **서명을 검증**하고, 값(채널·기간 등)을 어떻게 쓸지는 SDK 정책으로 정합니다.
+STT 서버는 라이선스 **파일 내용**을 문자열로 SDK에 넘깁니다. SDK는 이 모듈로 라이선스를 **판정**(서명·표준 필드·기간)하고, 통과하면 판정된 값(채널 상한)을 세션 풀과 동시 예약에 적용합니다. 검사 수준은 라이브러리가 정하며, 서명만 보는 방식은 없습니다(3.0.0, D46).
 
 실행으로 검증한 참조 구현은 `integration/harness/harness_jni.cpp`의 `connectHostLicense`입니다(★ 표시 = SDK로 옮길 부분). Java 결합 테스트는 `integration/harness/java/licenseharness/HarnessTest.java`에 있습니다.
 
@@ -12,11 +12,10 @@ STT 서버 (Java)                                   STT SDK (C++/JNI)           
 bytes = readAllBytes(LICENSE_FILE_PATH)
 hostLicense = new String(bytes, UTF_8)
 createSonaSTT(cb, configFile, hostLicense) ──▶  connect(cb, configFile, hostLicense)
-                                                 ① configFile 에서 검증 수준 읽기 (signature|full)
-                                                 ② jstring → UTF-16 → 표준 UTF-8 ─────────────▶ Utf16ToUtf8
-                                                 ③ 검증 ───────────────────────────────────────▶ Verify(text, mode, …)
-                                                 ④ 실패 → 1000+코드 반환 (연결 거부)
-                                                 ⑤ 성공 → SDK 정책으로 값 사용 ◀─────────────── VerifiedLicense.GetInt(…)
+                                                 ① jstring → UTF-16 → 표준 UTF-8 ─────────────▶ Utf16ToUtf8
+                                                 ② 판정(서명·필드·기간) ──────────────────────▶ VerifyLicense(text, …)
+                                                 ③ 실패 → 1000+코드 반환 (연결 거부)
+                                                 ④ 성공 → 판정된 값으로 SDK 초기화 ◀────────── LicenseFields
 ```
 
 ## 2. API 요약 (`#include "stt_license/license.h"`, 네임스페이스 `stt::license`)
@@ -25,14 +24,10 @@ createSonaSTT(cb, configFile, hostLicense) ──▶  connect(cb, configFile, ho
 
 | 함수 | 하는 일 | 실패 코드 |
 |---|---|---|
-| `VerifySignature(text, &license, &detail)` | **서명만**: 크기(64 KiB), BOM 제거, 엄격 JSON, `signature` 형식(표준 Base64·64바이트), Ed25519 | `FileTooLarge`, `ParseError`, `BadSignature`, `Internal`(내장 키 손상) |
-| `VerifyLicense(text, &license, &fields, &detail)` | 서명 + 표준 필드(필수·범위·`license_ver`) + **기간**(시스템 시각) | 위 + `InvalidField`, `UnsupportedVersion`, `NotYetValid`, `Expired` |
-| `Verify(text, mode, &license, &fields, &detail)` | `SignatureOnly`면 `VerifySignature`, `Full`이면 `VerifyLicense`와 **결과가 완전히 같음** | 모드에 따름 |
-| `ParseVerifyMode("signature"/"full", &mode)` / `VerifyModeName(mode)` | 설정 문자열 ↔ 모드. 그 외 문자열이면 `false` | — |
-| `license.GetString/GetInt/GetBool(path, &out)`, `Has(path)` | 서명된 내용에서 값 조회. 경로는 점으로 구분(`"allowed_channels.offline.sonastt"`). 없거나 타입이 다르면 `false` | — |
-| `license.canonical_json()` | 서명 대상 바이트(정규 JSON). SDK의 JSON 라이브러리로 직접 해석해도 됨 | — |
-| `ParseStandardFields(license, &fields)` | 표준 규칙으로 필드 해석(선택 도우미) | `InvalidField`, `UnsupportedVersion` |
-| `StateAt(fields, now)` | `NotYetValid` / `Valid` / `Expired`(유예 기간 없음) | — |
+| `VerifyLicense(text, &license, &fields, &detail)` | **문자열 방식의 유일한 판정.** 크기(64 KiB) → BOM 제거 → 엄격 JSON → `signature` 형식(표준 Base64·64바이트)·Ed25519 → 표준 필드(필수·범위·`license_ver`) → **기간**(시스템 시각) | `FileTooLarge`, `ParseError`, `BadSignature`, `InvalidField`, `UnsupportedVersion`, `NotYetValid`, `Expired`, `Internal`(내장 키 손상) |
+| `license.GetString/GetInt/GetBool(path, &out)`, `Has(path)` | 판정을 통과한 라이선스에서 값 조회. 경로는 점으로 구분(`"allowed_channels.offline.sonastt"`). 없거나 타입이 다르면 `false`. 표준 필드는 `fields`로 받고, 이것은 그 밖의 값(추가형 새 필드 등)용 | — |
+| `license.canonical_json()` | 서명 대상 바이트(정규 JSON) | — |
+| `StateAt(fields, now)` | `NotYetValid` / `Valid` / `Expired`(유예 기간 없음). 운영 중 기간 재판정용 | — |
 | `Utf16ToUtf8(ptr, len, &out)` | UTF-16 → 표준 UTF-8. 짝 없는 서로게이트면 `false` | — |
 | `ErrorName(e)` / `ErrorMessage(e)` | `"LICENSE_BAD_SIGNATURE"` / 현장 조치 문구(영문) | — |
 
@@ -65,69 +60,54 @@ static lic::Error JStringToUtf8(JNIEnv* env, jstring js, std::string* out) {
 ## 4. `connect` 구현 예
 
 ```cpp
-// configFile("--key=value", '#' 주석)에서 검증 수준을 읽는다.
-// 키가 없으면 signature(기존 SDK 동작 유지), 값이 잘못되면 false → 연결 거부(오타로 검증이 약해지지 않게).
-static bool ReadVerifyMode(const std::string& config_file, lic::VerifyMode* mode) {
-  *mode = lic::VerifyMode::SignatureOnly;
-  std::ifstream f(config_file);
-  const std::string key = "--license-verify-mode=";
-  for (std::string line; std::getline(f, line);) {
-    line = line.substr(0, line.find('#'));
-    const size_t b = line.find_first_not_of(" \t\r");
-    if (b == std::string::npos) continue;
-    line = line.substr(b, line.find_last_not_of(" \t\r") - b + 1);
-    if (line.compare(0, key.size(), key) == 0) return lic::ParseVerifyMode(line.substr(key.size()), mode);
-  }
-  return true;
-}
-
 JNIEXPORT jint JNICALL Java_<패키지>_<클래스>_connect(JNIEnv* env, jobject self, jobject callback,
                                                      jstring configFile, jstring hostLicense) {
   try {
-    std::string cfg = /* 기존 SDK 방식으로 configFile 경로 획득 */;
-    lic::VerifyMode mode;
-    if (!ReadVerifyMode(cfg, &mode)) return /* 설정 오류 코드 */ 2;
     if (hostLicense == nullptr) return /* 잘못된 인자 코드 */ 2;
+    // configFile 은 SDK 자체 설정용이다. 라이선스 검사 수준은 설정으로 바꿀 수 없다.
 
     std::string text;
     lic::Error e = JStringToUtf8(env, hostLicense, &text);
     lic::VerifiedLicense license;
-    lic::LicenseFields fields;          // Full 모드에서만 채워진다
+    lic::LicenseFields fields;          // 성공할 때만 채워진다
     std::string detail;
-    if (e == lic::Error::Ok) e = lic::Verify(text, mode, &license, &fields, &detail);
+    if (e == lic::Error::Ok) e = lic::VerifyLicense(text, &license, &fields, &detail);
     if (e != lic::Error::Ok) {
-      // 로그: lic::ErrorName(e), detail, lic::VerifyModeName(mode)
+      // (기존 .key 공존을 켰다면 e == ParseError 일 때만 기존 경로로 — §6)
+      // 로그: lic::ErrorName(e), detail
       return 1000 + static_cast<int>(e);                             // 연결 거부
     }
-    // ---- 여기부터 SDK 정책 (§7) ----
-    // ... 기존 connect 처리 계속 (세션 풀 생성 등)
+    // ---- 여기부터 SDK 초기화 (§7): 세션 풀 크기 = min(설정값, fields 의 세부 항목 상한) ----
+    // ... 기존 connect 처리 계속 (모델 백엔드, 세션 풀 생성 등)
     return 0;
   } catch (...) {
     return /* 내부 오류 코드 */ 9;     // C++ 예외가 JVM 으로 넘어가면 프로세스가 죽는다
   }
 }
 ```
-분리 함수를 직접 써도 됩니다: `lic::VerifySignature(text, &license)` / `lic::VerifyLicense(text, &license, &fields)`.
 
-## 5. 검증 수준 선택
+`connect` 순서 규칙(2026-10-21 흐름 검토):
+- **라이선스 판정을 맨 앞에 둡니다.** 판정이 `Ok`일 때만 모델 백엔드(onnx·ggml)를 준비하고, 세션 풀 크기는 라이선스 값으로 정합니다(§7). 판정 전에 모델·GPU 메모리를 잡지 않습니다.
+- **판정 통과를 전역 상태로 먼저 남기지 않습니다.** 라이선스 값은 초기화가 모두 성공한 뒤에 반영합니다. 초기화 도중 실패하면 잡은 자원을 풀고 오류를 반환합니다. 반쯤 초기화된 상태가 남으면 다음 호출이 판정 없이 지나갈 수 있습니다.
+- **검사만으로 끝나지 않습니다.** 채널 상한은 판정이 아니라 값 적용입니다. 세션 풀·동시 예약에 쓰지 않으면 상한이 집행되지 않습니다.
+- **두 번째 `connect` 호출을 정합니다.** 이미 연결된 상태에서 다시 부르면 거부할지, 기존 자원을 정리하고 다시 판정할지 정합니다(§8 갱신 방식과 같은 문제). 정하기 전에는 거부합니다.
+- **`callback`은 로컬 참조입니다.** 네이티브 작업 스레드에서 콜백을 부르려면 `NewGlobalRef`로 붙잡고, 그 스레드는 `AttachCurrentThread`로 JVM에 붙입니다. 라이선스와 무관하지만 같은 함수에서 생기는 문제입니다.
+- **반환 코드 범위를 확인합니다.** 라이선스 오류는 `1001~1011`입니다. SDK의 기존 오류 코드가 이 범위와 겹치지 않는지 SDK 저장소에서 확인합니다. 겹치면 STT 서버가 원인을 잘못 판단합니다.
 
-| 설정(`--license-verify-mode`) | 동작 | 용도 |
-|---|---|---|
-| 없음 또는 `signature` | 서명만. 만료된 라이선스도 서명이 맞으면 통과 | **기본.** 기존 SDK와의 호환 장치 — 기간은 SDK의 별도 만료 장치가 적용 |
-| `full` | 서명 + 표준 필드 + 기간(미개시 `1007`, 만료 `1008`) | 코어 규칙을 그대로 쓸 때. **시험(`trial`)·개발(`dev`) 라이선스를 받는 서버는 이 모드**(D43) |
-| 그 외(오타 포함, 대소문자 구분) | 연결 거부 | 조용히 약한 검증으로 넘어가지 않게 |
+## 5. 검사 수준
 
-`signature` 모드의 전제(2026-09-30 결정 검토):
-- 받아 주는 것은 **새 형식(서명된 JSON)** 라이선스뿐입니다.
-- SDK의 별도 만료 장치가 **새 형식 라이선스로 연결할 때도** 실제로 걸리는지 확인해야 합니다. 그 장치가 기존 `.key`에서 만료일을 읽는 구조라면, `license.GetString("validity.not_after", …)` 값을 넘겨야 합니다.
-- 그 장치가 운영 라이선스의 영구 값 `9999-12-31T23:59:59Z`를 처리하는지도 확인합니다. UTC 64비트 epoch로 비교해야 합니다. 현지 시각 변환·32비트 `time_t`·`mktime`류를 쓰면 범위를 넘을 수 있습니다(04-license-format.md §4 "다른 언어·도구").
+- 검사 수준은 **라이브러리가 정합니다.** `VerifyLicense`는 서명·표준 필드·기간을 모두 판정하고, SDK 설정으로 낮출 수 없습니다.
+- 그래서 만료된 라이선스는 `1008`, 시작 전 라이선스는 `1007`로 연결을 거부합니다. 운영 라이선스는 영구 값(`9999-12-31T23:59:59Z`)이라 만료되지 않습니다.
+- 이전 판(2.x)의 설정 `--license-verify-mode`와 `signature` 모드(서명만 확인)는 3.0.0에서 삭제했습니다. 설정 파일에 그 키가 남아 있어도 판정에 영향이 없습니다(하네스 시험).
+- 새 형식 라이선스에는 SDK의 별도 만료 장치를 쓰지 않습니다. 그 장치는 기존 `.key` 경로(§6)에만 남깁니다.
+- 기간은 `connect` 때 판정합니다. 운영 중 재판정은 §8의 미결 사항입니다(`StateAt(fields, now)`로 다시 볼 수 있음).
 
 ## 6. 기존 라이선스(`sonaLicense.*.key`)와 공존
 
-기존 `.key`는 이 모듈로는 **어떤 모드로도 검증되지 않습니다**(`1003`, 실제 파일로 확인). 두 형식을 함께 받으려면 SDK가 분기합니다.
+기존 `.key`는 이 모듈로는 **검증되지 않습니다**(`1003`, 실제 파일로 확인). 두 형식을 함께 받으려면 SDK가 분기합니다.
 
 ```cpp
-lic::Error e = lic::Verify(text, mode, &license, &fields, &detail);
+lic::Error e = lic::VerifyLicense(text, &license, &fields, &detail);
 if (e == lic::Error::ParseError && legacy_enabled) {
   // JSON 이 아닌 입력만 기존 경로로 보낸다. BadSignature 등 다른 실패는 절대 기존 경로로 넘기지 않는다
   // (새 형식을 변조한 파일이 기존 경로로 우회하지 못하게).
@@ -142,31 +122,30 @@ if (e == lic::Error::ParseError && legacy_enabled) {
 - 기존 경로를 허용할지(`legacy_enabled`)는 설정으로 둡니다. 어느 경로로 연결했는지 로그에 남깁니다.
 - 기존 해독기가 파일 경로만 받는 구조라면, 기존 설정(`--sonastt-license-license-path`)을 그대로 쓰는 편이 단순합니다.
 
-## 7. 값 사용 (SDK 정책 예)
+## 7. 값 사용 (SDK 초기화)
 
 ```cpp
-std::int64_t total, sonastt;
-if (license.GetInt("allowed_channels.total", &total) &&
-    license.GetInt("allowed_channels.offline.sonastt", &sonastt)) {
-  // total = 모든 항목·세부 항목의 동시 세션 합계 상한, offline.sonastt = 그 세부 항목의 상한.
-  // 예) sonastt 세션 수 = min(cfg num-sessions, sonastt), 동시 예약은 세부 항목 상한과 total 을 모두 지킨다.
-  // 항목 이름은 라이선스마다 정할 수 있으므로, SDK 가 어떤 항목 이름을 읽을지 미리 정해 둔다.
-  // 키가 없으면 그 세부 항목은 허용되지 않은 것(상한 0)으로 본다.
-}
-std::string not_after;
-if (license.GetString("validity.not_after", &not_after)) {
-  // signature 모드에서 SDK 의 만료 장치에 넘길 값 ("YYYY-MM-DDTHH:MM:SSZ", UTC)
-}
+// fields 는 VerifyLicense 가 판정한 값이다(범위 검사를 다시 하지 않는다).
+// total = 모든 항목·세부 항목의 동시 세션 합계 상한, channels["offline"]["sonastt"] = 그 세부 항목의 상한.
+auto cap = [&](const std::string& group, const std::string& engine) {
+  auto g = fields.channels.find(group);
+  if (g == fields.channels.end()) return 0;              // 라이선스에 없는 항목 = 상한 0
+  auto it = g->second.find(engine);
+  return it == g->second.end() ? 0 : it->second;         // 라이선스에 없는 세부 항목 = 상한 0
+};
+const int sonastt_sessions = std::min(cfg_num_sessions, cap("offline", "sonastt"));
+// 동시 예약은 세부 항목 상한과 fields.total_channels 를 모두 지킨다.
 ```
-- 값은 **서명된 내용에서만** 나옵니다. 서명 범위 밖의 값은 존재할 수 없습니다.
-- `signature` 모드에서 받은 값은 **형식·범위 검증을 거치지 않았습니다.** 정책에 쓰기 전에 SDK가 범위를 확인합니다(예: 채널 수 음수 불가 — 파서가 이미 거부, 상한은 SDK가 판단). 표준 규칙을 그대로 쓰려면 `ParseStandardFields`를 부르면 됩니다.
+- 값은 **서명된 내용에서만** 나오고, `VerifyLicense`가 범위까지 판정한 뒤에만 채워집니다.
+- 항목 이름은 라이선스마다 정할 수 있으므로, SDK가 어떤 항목·세부 항목 이름을 읽을지 미리 정해 둡니다.
+- 표준 필드 밖의 값이 필요하면 `license.GetInt(path, &n)` 등으로 읽습니다(판정을 통과한 라이선스에서만).
 
 ## 8. 미결 사항 — 라이선스 갱신 (추후 결정)
 
 SDK는 파일 경로를 모르므로 자동 재적재가 없습니다. **지금은 갱신하려면 서버를 재시작**(=`connect` 재호출)해야 합니다. 결정 전에 분석할 항목:
 1. 세션(채널) 수 반영: `connect` 때 만든 세션 풀(GPU 메모리)의 증감, 진행 중인 작업 처리
 2. `connect` 재호출이 안전한지, 아니면 `updateLicense(String)` 같은 별도 native가 필요한지
-3. `full` 모드도 기간을 `connect` 시점에만 검사하므로, 재시작 없이 오래 도는 서버는 만료 후에도 동작합니다. 운영 중 재판정 방식도 함께 정해야 합니다.
+3. 기간은 `connect` 시점에만 검사하므로, 재시작 없이 오래 도는 서버는 만료 후에도 동작합니다. 운영 중 재판정 방식(`StateAt`)도 함께 정해야 합니다.
 
 ## 9. 오류 코드
 
@@ -178,10 +157,10 @@ JNI 반환값은 `1000 + Error 순번`입니다. 순번은 헤더의 `static_ass
 | 1002 | `LICENSE_FILE_TOO_LARGE` | 64 KiB(문자열은 64K 문자) 초과 | 공통 |
 | 1003 | `LICENSE_PARSE_ERROR` | JSON이 아님·규격 위반(기존 `.key` 포함) | 공통 |
 | 1004 | `LICENSE_BAD_SIGNATURE` | 서명 누락·형식 오류·불일치(변조, 다른 키) | 공통 |
-| 1005 | `LICENSE_INVALID_FIELD` | 필수 필드·범위·시각 형식 위반 | full, Manager |
-| 1006 | `LICENSE_UNSUPPORTED_VERSION` | `license_ver`가 1이 아님(이 엔진이 모르는 버전). `license_ver`가 없으면 `1005` | full, Manager |
-| 1007 | `LICENSE_NOT_YET_VALID` | 시작 전 | full, Manager |
-| 1008 | `LICENSE_EXPIRED` | 종료 시각 지남 | full, Manager |
+| 1005 | `LICENSE_INVALID_FIELD` | 필수 필드·범위·시각 형식 위반 | 공통 |
+| 1006 | `LICENSE_UNSUPPORTED_VERSION` | `license_ver`가 1이 아님(이 엔진이 모르는 버전). `license_ver`가 없으면 `1005` | 공통 |
+| 1007 | `LICENSE_NOT_YET_VALID` | 시작 전 | 공통 |
+| 1008 | `LICENSE_EXPIRED` | 종료 시각 지남 | 공통 |
 | 1009 | `LICENSE_CHANNEL_LIMIT` | 세부 항목 상한 또는 `total` 초과 | Manager |
 | 1010 | `LICENSE_INTERNAL_ERROR` | 내장 공개키 손상 등 | 공통 |
 | 1011 | `LICENSE_ENGINE_NOT_LICENSED` | 라이선스에 없거나 상한 0인 항목·세부 항목 | Manager |
@@ -189,7 +168,7 @@ JNI 반환값은 `1000 + Error 순번`입니다. 순번은 헤더의 `static_ass
 ## 10. 구현 규칙
 
 - **JNI 진입점은 전부 `try { … } catch (...)`로 감쌉니다.** C++ 예외가 JVM으로 넘어가면 프로세스가 종료됩니다.
-- **스레드:** `VerifySignature`, `VerifyLicense`, `Verify`는 상태가 없어 여러 스레드에서 동시에 호출해도 됩니다. `VerifiedLicense`는 불변이라 복사본을 여러 스레드에서 읽어도 됩니다.
+- **스레드:** `VerifyLicense`는 상태가 없어 여러 스레드에서 동시에 호출해도 됩니다. `VerifiedLicense`는 불변이라 복사본을 여러 스레드에서 읽어도 됩니다.
 - **자원:** 모듈은 스레드를 만들지 않고, 시그널 핸들러를 등록하지 않으며, 전역 초기화 순서에 의존하지 않습니다.
 - **언어:** 공개 헤더는 C++11 이상에서 포함할 수 있습니다. 구현은 C++17로 빌드됩니다([01-build.md](01-build.md)).
 

@@ -68,10 +68,8 @@ c = json.load(open(sys.argv[1])); c["project_name"] = "STT 😀 프로젝트"
 print(json.dumps(c, ensure_ascii=False))
 PY
 "$L" issue -key "$W/keys/private.key" -in "$W/emoji.json" -out "$W/emoji.lic" >/dev/null
-# SDK 설정 파일 흉내 (검증 수준 선택)
-printf -- '--license-verify-mode=signature   # 서명만\n' > "$W/sig.cfg"
-printf -- '# 값까지 검증\n  --license-verify-mode=full\n' > "$W/full.cfg"
-printf -- '--license-verify-mode=FULL\n' > "$W/bad.cfg"
+# SDK 설정 파일 흉내: 없어진 옛 검증 수준 키가 남아 있어도 판정이 낮아지지 않는지 확인용
+printf -- '--license-verify-mode=signature   # 옛 설정(무시됨)\n' > "$W/sig.cfg"
 "$L" verify -pub "$W/keys/public.key" "$W/valid.lic" >/dev/null
 if "$L" verify -pub "$W/keys/public.key" "$W/tampered.lic" >/dev/null; then echo "tampered verified"; exit 1; fi
 if "$L" verify -pub "$W/keys/public.key" "$W/expired.lic" >/dev/null; then echo "expired verified"; exit 1; fi

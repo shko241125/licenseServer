@@ -51,7 +51,7 @@ FetchContent_MakeAvailable(stt_license)
 
 | 타깃 | 용도 |
 |---|---|
-| `stt_license::embedded` | **SDK가 링크하는 타깃.** 코어와 내장 공개키를 함께 포함(`VerifySignature`·`VerifyLicense`·`Verify`·`Manager::Open`이 여기서 정의됨) |
+| `stt_license::embedded` | **SDK가 링크하는 타깃.** 코어와 내장 공개키를 함께 포함(`VerifyLicense`·`Manager::Open`이 여기서 정의됨) |
 | `stt_license::core` | 공개키 없는 코어(발급 도구·테스트용). SDK는 쓰지 않는다 |
 
 키 파일 없이 구성해도 설정 단계는 통과한다. 이때 `stt_license::embedded`를 빌드하려 하면 다음 메시지로 실패한다. 키를 빠뜨린 배포 빌드가 만들어지는 일을 막기 위한 의도된 동작이다.
@@ -239,11 +239,11 @@ strings -n 44 libsonastt_jni_v2.so | grep -xE '[A-Za-z0-9+/]{43}=' |
 | `must be a SHARED or MODULE library` | 정적 라이브러리에 하드닝 함수를 적용함 | 최종 `.so` 타깃에 적용 |
 | 하드닝 후 다른 라이브러리에서 `undefined symbol` | 필요한 심볼까지 숨겨짐 | `EXPORTS "<패턴>"` 추가 |
 | 운영 이미지에서 `GLIBC_2.3x not found` | 더 새로운 배포판에서 빌드함 | Ubuntu 22.04에서 빌드 |
-| 링크 에러 `undefined reference to stt::license::VerifySignature`(또는 `Manager::Open`) | `stt_license::core`만 링크함 | `stt_license::embedded`를 링크 |
+| 링크 에러 `undefined reference to stt::license::VerifyLicense`(또는 `Manager::Open`) | `stt_license::core`만 링크함 | `stt_license::embedded`를 링크 |
 
 ## 9. CMake를 쓰지 않는 경우
 
 1. `core/src/{json,crypto,license,manager}.cpp`를 `-std=c++17 -fPIC -fvisibility=hidden`으로 컴파일한다.
-2. `core/src/embedded_key.cpp.in`의 `@STT_LICENSE_PUBLIC_KEY_B64@`를 `public.key` 내용(44자)으로 바꾼 파일도 함께 컴파일한다(내장 키를 쓰는 `VerifySignature`·`VerifyLicense`·`Verify`·`Manager::Open`이 이 파일에 있다).
+2. `core/src/embedded_key.cpp.in`의 `@STT_LICENSE_PUBLIC_KEY_B64@`를 `public.key` 내용(44자)으로 바꾼 파일도 함께 컴파일한다(내장 키를 쓰는 `VerifyLicense`·`Manager::Open`이 이 파일에 있다).
 3. include 경로는 `core/include`(공개)와 `core/src`(내부)다.
 4. 최종 `.so`의 링크 옵션에 `-Wl,--exclude-libs,ALL -Wl,--version-script=<map>`을 추가한다. map의 형식은 §4 함수가 생성하는 파일과 같다.

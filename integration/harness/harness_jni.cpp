@@ -11,7 +11,6 @@
 #include <memory>
 #include <mutex>
 #include <cstdint>
-#include <fstream>
 #include <string>
 #include <vector>
 
@@ -38,27 +37,9 @@ struct State {
   std::mutex mu;
   std::unique_ptr<lic::Manager> manager;
   std::map<std::string, Session> sessions;  // "sonastt-0", "sonaasr-3" ...
-  lic::VerifiedLicense host_license;        // connectHostLicense 로 받은, 서명 검증된 라이선스
-  lic::VerifyMode host_mode = lic::VerifyMode::SignatureOnly;
+  lic::VerifiedLicense host_license;        // connectHostLicense 로 받은, 판정(서명·필드·기간)을 통과한 라이선스
+  lic::LicenseFields host_fields;           // 그 판정된 값
 };
-
-// ★ SDK 설정 파일(sonastt_service.cfg 형식 "--key=value", '#' 주석)에서 검증 수준을 읽는다.
-//   키가 없으면 SignatureOnly(기존 SDK 동작 유지), 값이 잘못되면 false(연결 거부 — 오타로 검증이 약해지지 않게).
-bool ReadVerifyMode(const std::string& config_file, lic::VerifyMode* mode) {
-  *mode = lic::VerifyMode::SignatureOnly;
-  std::ifstream f(config_file);
-  if (!f) return true;  // 설정 파일이 없으면 기본값 (실제 SDK 는 자체 규칙을 따름)
-  const std::string key = "--license-verify-mode=";
-  std::string line;
-  while (std::getline(f, line)) {
-    line = line.substr(0, line.find('#'));
-    size_t b = line.find_first_not_of(" \t\r");
-    if (b == std::string::npos) continue;
-    line = line.substr(b, line.find_last_not_of(" \t\r") - b + 1);
-    if (line.compare(0, key.size(), key) == 0) return lic::ParseVerifyMode(line.substr(key.size()), mode);
-  }
-  return true;
-}
 
 State& G() {
   static State s;
@@ -214,36 +195,34 @@ JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_reloadLicense(JNIEnv*, job
   }, jint{kErrInternal});
 }
 
-// ---- 실제 STT 서버 API 형태: connect(SonaSttListener callback, String sttHomePath, String hostLicense) ----
-// 공통 코어는 서명만 검증하고, 어떤 값을 쓸지(채널·기간 등)는 SDK 가 정한다.
+// ---- 실제 STT 서버 API 형태: connect(SonaSttListener callback, String configFile, String hostLicense) ----
+// 검사 수준은 라이브러리가 정한다: 서명·표준 필드·기간을 모두 판정하고, 설정 파일로 낮출 수 없다.
+// configFile 은 SDK 자체 설정용이며 라이선스 판정에는 쓰지 않는다(옛 --license-verify-mode 가 있어도 무시).
 JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_connectHostLicense(JNIEnv* env, jobject, jobject /*callback*/,
-                                                                          jstring configFile,
+                                                                          jstring /*configFile*/,
                                                                           jstring hostLicense) {
   return Guard([&]() -> jint {
     if (hostLicense == nullptr) return kErrInvalidArgument;
-    std::string cfg;
-    lic::VerifyMode mode;
-    if (configFile != nullptr && !GetString(env, configFile, &cfg)) return kErrInvalidArgument;  // 경로는 ASCII 전제
-    if (!ReadVerifyMode(cfg, &mode)) return kErrInvalidArgument;                                 // 잘못된 모드 값
     std::string text;
     lic::Error e = JStringToUtf8(env, hostLicense, &text);
     lic::VerifiedLicense verified;
     lic::LicenseFields fields;
     std::string detail;
-    // ★ 공통 진입점: SignatureOnly = 서명만 / Full = 서명 + 표준 필드 + 기간 (분리 함수 VerifySignature·VerifyLicense 와 동일)
-    if (e == lic::Error::Ok) e = lic::Verify(text, mode, &verified, &fields, &detail);
-    if (e != lic::Error::Ok) return LicenseCode(e);                               // 검증 실패 → 연결 거부
+    // ★ 판정: 서명 → 표준 필드 → 기간. 실패하면 출력을 채우지 않는다.
+    if (e == lic::Error::Ok) e = lic::VerifyLicense(text, &verified, &fields, &detail);
+    // ★ 기존 .key 공존을 켠 SDK 는 여기서 e == ParseError 일 때만 기존 경로로 보낸다(02-integration.md §6).
+    if (e != lic::Error::Ok) return LicenseCode(e);                               // 판정 실패 → 연결 거부
+    // ★ 여기부터 SDK 초기화: 세션 풀 크기 = min(설정값, fields.channels 의 세부 항목 상한), 동시 예약은 total 도 지킴.
+    //   모델 백엔드 준비가 모두 성공한 뒤에 상태를 반영한다(02-integration.md §4 순서 규칙).
     State& g = G();
     std::lock_guard<std::mutex> lock(g.mu);
     g.host_license = verified;
-    g.host_mode = mode;
-    // ★ 여기부터는 SDK 정책 영역: 예) allowed_channels 가 있으면 세션 수 상한으로 쓰고, 없으면 기존 설정 유지.
-    //    기간 검사를 할지(ParseStandardFields + StateAt), 무시할지도 SDK 가 정한다.
+    g.host_fields = fields;
     return 0;
   }, jint{kErrInternal});
 }
 
-// SDK 가 검증된 값을 어떻게 꺼내는지 보여 주는 조회용 (테스트에서 확인).
+// SDK 가 판정된 값을 어떻게 꺼내는지 보여 주는 조회용 (테스트에서 확인).
 JNIEXPORT jstring JNICALL Java_licenseharness_SttHarness_hostLicenseInfo(JNIEnv* env, jobject) {
   std::string out = Guard([&]() -> std::string {
     State& g = G();
@@ -259,13 +238,12 @@ JNIEXPORT jstring JNICALL Java_licenseharness_SttHarness_hostLicenseInfo(JNIEnv*
     v.GetString("site_id", &site);
     v.GetString("validity.not_after", &not_after);
     v.GetString("project_name", &project);
-    lic::LicenseFields f;
-    lic::Error std_e = lic::ParseStandardFields(v, &f);    // 선택: 표준 규칙 판정 결과만 알려 줌
+    const lic::LicenseFields& f = g.host_fields;            // 표준 필드는 판정된 값으로 받는다
     return "{\"result\":0,\"total\":" + std::to_string(total) + ",\"offline_sonastt\":" + std::to_string(sonastt) +
            ",\"offline_sonaasr\":" + std::to_string(sonaasr) + ",\"solution\":" + Quote(solution) +
            ",\"site_id\":" + Quote(site) + ",\"not_after\":" + Quote(not_after) +
-           ",\"project_name\":" + Quote(project) + ",\"standard\":" + Quote(lic::ErrorName(std_e)) +
-           ",\"mode\":" + Quote(lic::VerifyModeName(g.host_mode)) +
+           ",\"project_name\":" + Quote(project) + ",\"fields_total\":" + std::to_string(f.total_channels) +
+           ",\"fields_license_id\":" + Quote(f.license_id) +
            ",\"canonical_bytes\":" + std::to_string(v.canonical_json().size()) + "}";
   }, ErrorJson(kErrInternal, "INTERNAL", "internal error"));
   // 반환 문자열에 비 ASCII(한글 등)가 있을 수 있어 NewStringUTF(변형 UTF-8 입력) 대신 UTF-16 으로 만든다.
@@ -294,7 +272,7 @@ JNIEXPORT jint JNICALL Java_licenseharness_SttHarness_verifyViaModifiedUtf8(JNIE
     std::string text;
     if (!GetString(env, s, &text)) return kErrInvalidArgument;  // GetStringUTFChars
     lic::VerifiedLicense v;
-    lic::Error e = lic::VerifySignature(text, &v);
+    lic::Error e = lic::VerifyLicense(text, &v, nullptr);
     return e == lic::Error::Ok ? 0 : LicenseCode(e);
   }, jint{kErrInternal});
 }
@@ -327,6 +305,7 @@ JNIEXPORT void JNICALL Java_licenseharness_SttHarness_disconnect(JNIEnv*, jobjec
     g.sessions.clear();  // Channel 소멸 → 반납
     g.manager.reset();
     g.host_license = lic::VerifiedLicense();
+    g.host_fields = lic::LicenseFields();
     return 0;
   }, 0);
 }
