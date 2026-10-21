@@ -63,7 +63,7 @@ cp -r license-server/deploy/. /opt/license-server/ && cd /opt/license-server
 ### 키 생성식 (최초 1회)
 네트워크 없는 컨테이너에서 **운영자 uid로** 실행해야, 생성된 파일을 운영자가 다룰 수 있습니다.
 ```bash
-TAG=<버전>        # 패키지 VERSION 첫 줄(예: 1.7.0)
+TAG=<버전>        # 패키지 VERSION 첫 줄(예: 1.8.0)
 mkdir -m 700 ceremony && U="$(id -u):$(id -g)"
 docker run --rm --network none --user $U --entrypoint /opt/licensectl -v $PWD/ceremony:/work \
   license-server:$TAG keygen -out /work/keys

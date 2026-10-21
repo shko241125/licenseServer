@@ -62,7 +62,7 @@ scripts/check.sh                                          # 선택: 전체 검�
 | `stt-license-sdk-<버전>.tar.gz.sha256` | 위 파일의 SHA-256 (`sha256sum -c` 형식) |
 | `public.key` *(별도, 바뀔 때만)* | 운영 공개키. 지문은 다른 경로로 |
 
-### 패키지 안 (2.0.2 기준 42개)
+### 패키지 안 (3.0.0 기준)
 | 경로 | 파일 | SDK 빌드에 필요 |
 |---|---|---|
 | `README.md`, `VERSION`, `SHA256SUMS` *(생성)* | 루트 안내, 버전·원 커밋, 파일 해시 | |
@@ -70,7 +70,7 @@ scripts/check.sh                                          # 선택: 전체 검�
 | `cmake/SttLicenseHardening.cmake` | 심볼 은닉 함수 | ● |
 | `core/include/stt_license/license.h` | 공개 헤더(C++11 이상) | ● |
 | `core/src/` | `crypto.cpp/.h`, `detail.h`, `embedded_key.cpp.in`, `json.cpp/.h`, `license.cpp`, `manager.cpp` | ● |
-| `core/tests/` | `json_test.cpp`, `license_test.cpp`, `manager_test.cpp`, `verify_test.cpp`, `test_util.h`, `crosscheck/GoldenCheck.java` | |
+| `core/tests/` | `check_mode_test.cpp`, `json_test.cpp`, `license_test.cpp`, `manager_test.cpp`, `verify_test.cpp`, `test_util.h`, `crosscheck/GoldenCheck.java` | |
 | `core/testdata/` | `golden_canonical.json`, `golden_license.lic`, `golden_public.key`(정규화 호환 증거), `contract.example.json` | |
 | `core/fuzz/fuzz_parse.cpp` | libFuzzer 대상 | |
 | `tools/licensectl/main.cpp` | 개발·검증용 CLI | |
