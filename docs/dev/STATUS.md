@@ -89,7 +89,7 @@
 | 갱신 방식 | 세션 풀 증감, `connect` 재호출 안전성, 운영 중 기간 재판정 | D18, `docs/sdk/02-integration.md` §8 |
 | 단기 변경 발급(부하 시험 등) | 제안·사용자 검토 대기: 기존 개발 라이선스는 그대로 두고 **새 발급**(갱신 발급 아님)으로 같은 과제의 `dev`, 같은 총 개발기한, 시험 채널, 시험 기간만. 시험 뒤 원래 파일로 되돌려 재시작하고 장부에서 무효 처리. 근거: 갱신 발급은 `renewed_from` 때문에 원본이 만료 알림에서 빠짐(`LicenseRepository.expiringBetween`), 오프라인이라 폐기 불가, `full`도 `connect` 때만 기간 판정 | D18, D22, D24, D43 |
 | 형식 변경 후 전방 호환(이전 SDK가 재빌드 없이 이후 발급분을 받음) | **결정(D46·D47), 코어 3.0.0 구현·발행 완료(2026-10-21, `sdk-v3.0.0`).** 추가형 진화(A1~A10) + 서명된 `check_mode` + 검사 수준은 라이브러리·라이선스가 정함. D47: 아는 판은 `minimal`이어도 전체 규칙, `check_mode` 결과는 적용한 수준, 판 2 이상 발급은 사이트 기록 기반(안 C), 라이브러리 정보 API. 남은 것: 3단계(첫 추가형 필드·C4·I8), 4단계(판 2: 하위 버전 발급·`minimal` 발급·사이트별 SDK 코어 기록) | [forward-compat.md](forward-compat.md) §13·§14, D46, D47 |
-| `signature` 모드 전제 | **해소(2026-10-21, D46, 코어 3.0.0 미발행):** `signature` 모드와 `VerifySignature`를 삭제해 새 형식의 기간은 항상 라이브러리가 판정. SDK 별도 만료 장치는 기존 `.key` 경로에만 남음(영구 값 9999년 처리 확인은 그 경로에 한해 유효) | D17(대체됨), D46, [remove-signature-mode.md](remove-signature-mode.md) |
+| `signature` 모드 전제 | **해소(2026-10-21, D46, 코어 3.0.0 발행 `sdk-v3.0.0`):** `signature` 모드와 `VerifySignature`를 삭제해 새 형식의 기간은 항상 라이브러리가 판정. SDK 별도 만료 장치는 기존 `.key` 경로에만 남음(영구 값 9999년 처리 확인은 그 경로에 한해 유효) | D17(대체됨), D46, [remove-signature-mode.md](remove-signature-mode.md) |
 
 ## 5. 로컬 전용 검증 (클라우드로 대신할 수 없음)
 
