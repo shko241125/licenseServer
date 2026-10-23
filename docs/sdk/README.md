@@ -33,12 +33,13 @@ if (e != lic::Error::Ok) return 1000 + static_cast<int>(e);    // 연결 거부
 nm -D --defined-only libsonastt_jni_v2.so | awk '{print $3}' | grep -v '^Java_'   # 출력이 없어야 함
 scripts/check.sh                                                                   # 이 패키지 전체 검증
 ```
-자세한 내용은 아래 문서를 봅니다.
+자세한 내용은 아래 문서를 봅니다. 처음이면 [developer-manual.md](developer-manual.md)부터 따라 합니다.
 
 ## 2. 문서 지도
 
 | 문서 | 내용 | 주 독자 |
 |---|---|---|
+| [developer-manual.md](developer-manual.md) | **처음 적용하는 SDK 개발자용 매뉴얼.** 큰 그림, 10단계 따라 하기(패키지 확인 → 개발 키 시험 → 운영 빌드 → 배포 전 확인), API·오류 빠른 참조, 하지 말 것, FAQ | SDK |
 | [01-build.md](01-build.md) | SDK CMake에 넣기, 옵션, OpenSSL 재사용, 심볼 은닉, 빌드 환경, 문제 해결 | SDK |
 | [02-integration.md](02-integration.md) | 코드 결합: 검증 API, `connect(hostLicense)` 구현, 검사 수준(라이브러리가 정함), 기존 `.key` 공존, 오류 코드 | SDK |
 | [03-stt-server.md](03-stt-server.md) | STT 서버(Java) 측: 라이선스 읽기·전달, 오류 처리, 설정, Docker | 서버 |

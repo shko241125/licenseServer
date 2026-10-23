@@ -4,6 +4,7 @@
 
 - 스택: Spring Boot 4.1.1 · Java 21 · Spring Security 7 · Thymeleaf · PostgreSQL 16 · Flyway · Gradle 9.8
 - 구성: `web`(이 서버) + `db`(PostgreSQL) 두 컨테이너
+- 화면을 쓰는 사람(관리자·발급자·조회자)용 안내: [docs/user-manual.md](docs/user-manual.md). 이 README는 설치·운영 담당용입니다.
 
 ## 1. 보안 구조 요약
 

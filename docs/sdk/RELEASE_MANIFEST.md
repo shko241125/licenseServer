@@ -20,7 +20,7 @@ SDK 패키지는 라이선스 **발급 서버와 분리해서** 발행합니다.
 | `integration/harness/` | JNI 참조 구현(★ = SDK로 옮길 부분) + Java 결합 테스트 | |
 | `integration/cmake-consumer/` | SDK 형태 CMake 소비자(연동 인수 테스트) | |
 | `scripts/check.sh` | 전체 검증 7단계 | |
-| `docs/sdk/` | 이 문서 묶음(README, 01~06, 이 목록) | |
+| `docs/sdk/` | 이 문서 묶음(README, 개발자 매뉴얼, 01~06, 이 목록) | |
 | `.gitattributes` | `*.sh` LF 줄바꿈 유지 | |
 | `README.md` *(생성)* | 패키지 루트 안내 → `docs/sdk/README.md` | |
 | `VERSION` *(생성)* | 버전과 원 저장소 커밋 | |

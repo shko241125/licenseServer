@@ -99,6 +99,7 @@ cp -r license-server/deploy/. /opt/license-server/ && cd /opt/license-server
 | `license-server/deploy/podman-stack.sh` | podman 판 구성 도구(compose 대신) |
 | `license-server/deploy/db-init/01-roles.sh` | DB 최초 초기화 때 계정 분리 |
 | `license-server/README.md` | 보안 구조, 설치, 운영, 문제 해결 |
+| `license-server/docs/user-manual.md` | 화면 사용자(관리자·발급자·조회자) 매뉴얼: 로그인, 발급·갱신, 검증, 키·계정·감사 로그 |
 | `license-server/docs/audit-hash-chain.md` | 감사 로그 해시 체인 방법론 |
 | `license-server/docs/licensectl-operations.md` | 발급 서버 없이 `licensectl`로 발급할 때의 절차 |
 | `docs/release/license-server.md` | 이 문서 |
