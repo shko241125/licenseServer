@@ -148,6 +148,7 @@ RFC 8259의 **엄격한 부분집합**만 받습니다.
   | `allowed_channels` | §2와 같음(`total` 1~100000, 항목 객체·세부 항목 0~`total`, 각 64개 이하, 1 이상인 값 하나 이상) |
   | `validity.not_before`·`not_after` | §2와 같음(형식, `not_before < not_after`, 기간 판정) |
 
+  - "영구 고정"은 키의 경로·타입·의미를 어떤 판에서도 바꾸지 않는다는 뜻이며, 파일에 반드시 있어야 한다는 뜻은 아닙니다. `check_mode`는 안정 필드 중 유일하게 생략할 수 있고, 없으면 `full`과 같습니다. 지금 발급하는 판 1 파일에는 이 키가 없는 것이 정상입니다. 나머지 안정 필드는 필수입니다.
   - 나머지 필드(`license_ver`, `project_name`, `license_type`, `solution`, `site_id`, `warning_notice`, `validity.issued_at`)는 규칙에 맞으면 채우고, 없거나 형식이 달라도 거부하지 않습니다(빈 값·0). 모르는 키는 무시합니다.
   - 판정 결과의 `check_mode`(`LicenseFields`·`Info`·`licensectl verify`)는 **적용한 수준**입니다. `minimal`이 보이면 그 SDK가 이 형식을 모른다는 뜻입니다(업그레이드 대상).
   - 그래서 SDK는 **안정 필드만** 동작 판단에 씁니다. 그 밖의 필드로 동작을 나누면 `minimal` 파일에서 깨집니다.

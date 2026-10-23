@@ -282,7 +282,7 @@ Manager는 운영 중에 채널을 잡을 때마다(`Acquire`) 다음을 다시 
 
 ## 9. 구현 계획 (코어 3.0.0)
 
-> **2단계도 완료(2026-10-21, §14).** 아래 표의 항목은 모두 반영했고 남은 것은 발행입니다.
+> **2단계도 완료(2026-10-21, §14).** 아래 표의 항목은 모두 반영했고, 발행도 끝났습니다(`sdk-v3.0.0`·`server-v1.8.0`, 2026-10-21).
 >
 > **1단계 완료(2026-10-21):** 검증 모드 API·`VerifySignature`·공개 `ParseStandardFields`·설정 삭제, 하네스·SDK 문서 갱신, `VERSION 3.0.0`. 결과와 수치는 [remove-signature-mode.md](remove-signature-mode.md) §6. 아래 표에서 1단계에 해당하는 항목은 끝났고, 남은 것은 `check_mode` 판정(2단계)입니다.
 
@@ -491,7 +491,7 @@ Error ExtractFields(const Value& root, LicenseData* out, std::string* detail) {
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | `signature` 모드 삭제(코어 3.0.0) | **완료**(2026-10-21, `73e9f13`) |
-| 2 | `check_mode` 판정(§9, R13 포함), `licensectl verify`·`InfoToJson` 출력, 발급 서버 검증 화면에 `license_ver`·`check_mode` 표시, I1·I3을 지키는지 확인하는 시험(발급 파일에 `issued_at`이 있고 DB 값과 같음, `check_mode` 없음), `sdk-v3.0.0` 발행, 발급 서버 y 버전 발행(새 `licensectl` 포함) | **구현 완료**(2026-10-21, §14). 발행(`sdk-v3.0.0`, 서버)은 남음 |
+| 2 | `check_mode` 판정(§9, R13 포함), `licensectl verify`·`InfoToJson` 출력, 발급 서버 검증 화면에 `license_ver`·`check_mode` 표시, I1·I3을 지키는지 확인하는 시험(발급 파일에 `issued_at`이 있고 DB 값과 같음, `check_mode` 없음), `sdk-v3.0.0` 발행, 발급 서버 y 버전 발행(새 `licensectl` 포함) | **완료**(2026-10-21, §14). 발행 `sdk-v3.0.0`·`server-v1.8.0` |
 | 3 | 첫 추가형 새 필드: A1~A10, §6.2 변경 목록, C4(SDK 최저 코어 시험), I8 | 필요해질 때 |
 | 4 | 첫 비추가형 변경(판 2): §13.4 전체, I3~I7, 하위 버전 발급 | 필요해질 때. §13.6 결정 후 |
 
